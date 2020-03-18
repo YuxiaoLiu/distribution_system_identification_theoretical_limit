@@ -28,16 +28,7 @@ classdef caseDistributionSystem
             obj.numBus = size(obj.mpc.bus, 1);
             obj.numSnap = numSnap;
             obj.range = range;
-            
-            % read and process the raw load data
-%             readLoadRaw(obj);
-
-            % read and process the load data
-            obj = readLoad(obj);
-            
-            % generate the steady state operation data
-            obj = genOperateData(obj);
-            
+                       
         end
         
         function readLoadRaw(obj)
