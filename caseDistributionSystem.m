@@ -13,7 +13,9 @@ classdef caseDistributionSystem
         
         loadP               % the active load of each bus
         loadQ               % the reactive load of each bus
+        
         data                % the data struct contains operation data
+        sigma               % the variance of each meansurement noise
     end
     
     methods
@@ -118,6 +120,48 @@ classdef caseDistributionSystem
             % assert that all the power flow converge
             assert(isempty(find(isSuccess == 0, 1)));
             obj.data = data_;
+        end
+        
+        function obj = setAccuracy(obj)
+            % This method set the accuracy of the measurement device and
+            % generate the measurement noise. This method also set whether
+            % we have the measurement of a certain state.
+            
+            % we first set the relative noise ratio, we assume the noise
+            % ratio is the sigma/mean value
+            ratio.P = 0.005;
+            ratio.Q = 0.005;
+            ratio.Vm = 0.001;
+            ratio.Va = 0.001;
+            
+            % We assume there is no noise in the source bus. We set the
+            % enlarge ratio of each rows of measurement noise.
+            obj.sigma.P = mean(abs(obj.data.P), 2) * ratio.P;
+            obj.sigma.Q = mean(abs(obj.data.Q), 2) * ratio.Q;
+            obj.sigma.Vm = mean(abs(obj.data.Vm), 2) * ratio.Vm;
+            obj.sigma.Va = mean(abs(obj.data.Vm), 2) * ratio.Vm;
+            obj.sigma.Vm(1) = 0;
+            obj.sigma.Va(1) = 0;
+            
+            % we generate the measurement noise
+            rng(1);
+            obj.data.P_noise = randn(obj.numBus, obj.numSnap);
+            obj.data.P_noise = bsxfun(@times, obj.data.P_noise, obj.sigma.P);
+            rng(2);
+            obj.data.Q_noise = randn(obj.numBus, obj.numSnap);
+            obj.data.Q_noise = bsxfun(@times, obj.data.Q_noise, obj.sigma.Q);
+            rng(3);
+            obj.data.Vm_noise = randn(obj.numBus, obj.numSnap);
+            obj.data.Vm_noise = bsxfun(@times, obj.data.Vm_noise, obj.sigma.Vm);
+            rng(4);
+            obj.data.Va_noise = randn(obj.numBus, obj.numSnap);
+            obj.data.Va_noise = bsxfun(@times, obj.data.Va_noise, obj.sigma.Va);
+            
+            % the measurement data
+            obj.data.P_noised = obj.data.P + obj.data.P_noise;
+            obj.data.Q_noised = obj.data.Q + obj.data.Q_noise;
+            obj.data.Vm_noised = obj.data.Vm + obj.data.Vm_noise;
+            obj.data.Va_noised = obj.data.Va + obj.data.Va_noise;
         end
     end
 end

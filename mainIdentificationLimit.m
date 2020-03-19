@@ -14,3 +14,6 @@ caseDS = caseDS.readLoad;
 caseDS = caseDS.genOperateData;
 
 %% We evaluate the bound
+% set the accuracy of the measurement device, and set whether we have the
+% measurement device of a certain state
+caseDS = caseDS.setAccuracy;

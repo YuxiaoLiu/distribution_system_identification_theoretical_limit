@@ -13,7 +13,9 @@ classdef caseDistributionSystem
         
         loadP               % the active load of each bus
         loadQ               % the reactive load of each bus
-        data                % the data struct
+        
+        data                % the data struct contains operation data
+        sigma               % the variance of each meansurement noise
     end
     
     methods
@@ -28,16 +30,7 @@ classdef caseDistributionSystem
             obj.numBus = size(obj.mpc.bus, 1);
             obj.numSnap = numSnap;
             obj.range = range;
-            
-            % read and process the raw load data
-%             readLoadRaw(obj);
-
-            % read and process the load data
-            obj = readLoad(obj);
-            
-            % generate the steady state operation data
-            obj = genOperateData(obj);
-            
+                       
         end
         
         function readLoadRaw(obj)
@@ -102,10 +95,10 @@ classdef caseDistributionSystem
         function obj = genOperateData(obj)
             % this method generate the steady state operation data by
             % running power flow equations
-            data.P = zeros(obj.numBus, obj.numSnap);
-            data.Q = zeros(obj.numBus, obj.numSnap);
-            data.Vm = zeros(obj.numBus, obj.numSnap);
-            data.Va = zeros(obj.numBus, obj.numSnap);
+            data_.P = zeros(obj.numBus, obj.numSnap);
+            data_.Q = zeros(obj.numBus, obj.numSnap);
+            data_.Vm = zeros(obj.numBus, obj.numSnap);
+            data_.Va = zeros(obj.numBus, obj.numSnap);
             isSuccess = ones(obj.numSnap, 1);
             
             for i = 1:obj.numSnap
@@ -118,15 +111,50 @@ classdef caseDistributionSystem
                 mpcThis = runpf(mpcThis, mpopt);
                 isSuccess(i, 1) = mpcThis.success;
                 % output the data
-                data.P = mpcThis.bus(:, 3);
-                data.Q = mpcThis.bus(:, 4);
-                data.Vm = mpcThis.bus(:, 8);
-                data.Va = mpcThis.bus(:, 9)/180*pi;
+                data_.P(:,i) = mpcThis.bus(:, 3);
+                data_.Q(:,i) = mpcThis.bus(:, 4);
+                data_.Vm(:,i) = mpcThis.bus(:, 8);
+                data_.Va(:,i) = mpcThis.bus(:, 9)/180*pi;
             end
             
             % assert that all the power flow converge
             assert(isempty(find(isSuccess == 0, 1)));
-            obj.data = data;
+            obj.data = data_;
+        end
+        
+        function obj = setAccuracy(obj)
+            % this method set the accuracy of the measurement device and
+            % generate the measurement noise
+            
+            % we first set the relative noise ratio, we assume the noise
+            % ratio is the sigma/mean value
+            ratio.P = 0.005;
+            ratio.Q = 0.005;
+            ratio.Vm = 0.001;
+            ratio.Va = 0.001;
+            
+            % We assume there is no noise in the source bus. We set the
+            % enlarge ratio of each rows of measurement noise.
+            obj.sigma.P = mean(abs(obj.data.P), 2) * ratio.P;
+            obj.sigma.Q = mean(abs(obj.data.Q), 2) * ratio.Q;
+            obj.sigma.Vm = mean(abs(obj.data.Vm), 2) * ratio.Vm;
+            obj.sigma.Va = mean(abs(obj.data.Vm), 2) * ratio.Vm;
+            obj.sigma.Vm(1) = 0;
+            obj.sigma.Va(1) = 0;
+            
+            % we generate the measurement noise
+            rng(1);
+            obj.data.P_noise = randn(obj.numBus, obj.numSnap);
+            obj.data.P_noise = bsxfun(@times, obj.data.P_noise, obj.sigma.P);
+            rng(2);
+            obj.data.Q_noise = randn(obj.numBus, obj.numSnap);
+            obj.data.Q_noise = bsxfun(@times, obj.data.Q_noise, obj.sigma.Q);
+            rng(3);
+            obj.data.Vm_noise = randn(obj.numBus, obj.numSnap);
+            obj.data.Vm_noise = bsxfun(@times, obj.data.Vm_noise, obj.sigma.Vm);
+            rng(4);
+            obj.data.Va_noise = randn(obj.numBus, obj.numSnap);
+            obj.data.Va_noise = bsxfun(@times, obj.data.Va_noise, obj.sigma.Va);
         end
     end
 end
