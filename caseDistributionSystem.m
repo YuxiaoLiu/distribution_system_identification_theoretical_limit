@@ -16,6 +16,7 @@ classdef caseDistributionSystem
         
         data                % the data struct contains operation data
         sigma               % the variance of each meansurement noise
+        isMeasure           % whether we have a specific measurement device
     end
     
     methods
@@ -133,6 +134,11 @@ classdef caseDistributionSystem
             ratio.Q = 0.005;
             ratio.Vm = 0.001;
             ratio.Va = 0.001;
+            % we then have to set whether we have the measurement device
+            obj.isMeasure.P = true(obj.numBus, 1);
+            obj.isMeasure.Q = true(obj.numBus, 1);
+            obj.isMeasure.Vm = true(obj.numBus, 1);
+            obj.isMeasure.Va = false(obj.numBus, 1);
             
             % We assume there is no noise in the source bus. We set the
             % enlarge ratio of each rows of measurement noise.
@@ -162,6 +168,13 @@ classdef caseDistributionSystem
             obj.data.Q_noised = obj.data.Q + obj.data.Q_noise;
             obj.data.Vm_noised = obj.data.Vm + obj.data.Vm_noise;
             obj.data.Va_noised = obj.data.Va + obj.data.Va_noise;
+        end
+        
+        function obj = buildFIM(obj)
+            % This method build the fisher information matrix (FIM). We
+            % build the FIM in the order of measurement device or
+            % measurement functions.
+            
         end
     end
 end

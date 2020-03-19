@@ -17,3 +17,4 @@ caseDS = caseDS.genOperateData;
 % set the accuracy of the measurement device, and set whether we have the
 % measurement device of a certain state
 caseDS = caseDS.setAccuracy;
+caseDS = caseDS.buildFIM;
