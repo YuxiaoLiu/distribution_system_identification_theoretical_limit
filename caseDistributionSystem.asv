@@ -112,6 +112,8 @@ classdef caseDistributionSystem
                 mpcThis = runpf(mpcThis, mpopt);
                 isSuccess(i, 1) = mpcThis.success;
                 % output the data
+                inject = makeSbus(mpcThis.baseMVA, mpcThis.bus, mpcThis.gen);
+                real(inject);
                 data_.P(:,i) = mpcThis.bus(:, 3);
                 data_.Q(:,i) = mpcThis.bus(:, 4);
                 data_.Vm(:,i) = mpcThis.bus(:, 8);
@@ -175,6 +177,9 @@ classdef caseDistributionSystem
             % build the FIM in the order of measurement device or
             % measurement functions.
             
+            % calculate the sub-matrix of P of all snapshots of bus i
+            for i = 1:obj.numBus
+            end
         end
     end
 end
