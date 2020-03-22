@@ -6,13 +6,15 @@ classdef caseDistributionSystem
         mpc                 % the matpower struct of the power system
         numBus              % the number of bus
         numSnap             % the number of snapshot
-        range               % % the deviation range
+        range               % the struct of deviation range
+        numFIM              % the struct representing the size of FIM matrix
         
         addressLoadRaw      % the address of raw load data
         addressLoad         % the address of preprocessed load data
         
         loadP               % the active load of each bus
         loadQ               % the reactive load of each bus
+        FIM                 % the fisher information matrix
         
         data                % the data struct contains operation data
         sigma               % the variance of each meansurement noise
@@ -113,15 +115,19 @@ classdef caseDistributionSystem
                 isSuccess(i, 1) = mpcThis.success;
                 % output the data
                 inject = makeSbus(mpcThis.baseMVA, mpcThis.bus, mpcThis.gen);
-                real(inject);
-                data_.P(:,i) = mpcThis.bus(:, 3);
-                data_.Q(:,i) = mpcThis.bus(:, 4);
+                data_.P(:,i) = real(inject);
+                data_.Q(:,i) = imag(inject);
                 data_.Vm(:,i) = mpcThis.bus(:, 8);
                 data_.Va(:,i) = mpcThis.bus(:, 9)/180*pi;
             end
             
             % assert that all the power flow converge
             assert(isempty(find(isSuccess == 0, 1)));
+            
+            % generate the G and B matrix
+            Y = makeYbus(obj.mpc);
+            data_.G = real(full(Y));
+            data_.B = imag(full(Y));
             obj.data = data_;
         end
         
@@ -141,6 +147,7 @@ classdef caseDistributionSystem
             obj.isMeasure.Q = true(obj.numBus, 1);
             obj.isMeasure.Vm = true(obj.numBus, 1);
             obj.isMeasure.Va = false(obj.numBus, 1);
+            obj.isMeasure.Vm(1) = false;
             
             % We assume there is no noise in the source bus. We set the
             % enlarge ratio of each rows of measurement noise.
@@ -177,8 +184,104 @@ classdef caseDistributionSystem
             % build the FIM in the order of measurement device or
             % measurement functions.
             
+            % initialize the FIM matrix
+            obj.numFIM.G = (1 + obj.numBus) * obj.numBus / 2;
+            obj.numFIM.B = (1 + obj.numBus) * obj.numBus / 2;
+            obj.numFIM.Vm = obj.numSnap * (obj.numBus - 1); % exclude the source bus
+            obj.numFIM.Va = obj.numSnap * (obj.numBus - 1);
+            obj.numFIM.Sum = obj.numFIM.G + obj.numFIM.B + obj.numFIM.Vm + obj.numFIM.Va;
+            obj.FIM = zeros(obj.numFIM.Sum, obj.numFIM.Sum);
+            
             % calculate the sub-matrix of P of all snapshots of bus i
             for i = 1:obj.numBus
+                if obj.isMeasure.P(i)
+                    for j = 1:obj.numSnap
+                        obj = buildFIMP(obj, i, j);
+                    end
+                end
+                if obj.isMeasure.Q(i)
+                end
+            end
+        end
+        
+        function obj = buildFIMP(obj, bus, snap)
+            % This method build the P part of FIM a selected bus and a selected snapshot. 
+            % We first build a matrix, then we reshape the matrix to a vector. At
+            % last we add up the FIM matrix. We conduct both G and B
+            % matrix. Note that the state variables of G and B form a half
+            % triangle, while the measurement function forms a whole
+            % matrix.
+            
+            h = zeros(obj.numFIM.Sum, 1);
+            theta_ij = obj.data.Va(bus, snap) - obj.data.Va(:, snap);
+            Theta_ij = repmat(obj.data.Va(:, snap), 1, obj.numBus) - repmat(obj.data.Va(:, snap)', obj.numBus, 1);
+            % G_ij\cos(\Theta_ij)+B_ij\sin(\Theta_ij)
+            GBThetaP = obj.data.G .* cos(Theta_ij) + obj.data.B .* sin(Theta_ij);
+            % G_ij\sin(\Theta_ij)-B_ij\cos(\Theta_ij)
+            GBThetaQ = obj.data.G .* sin(Theta_ij) - obj.data.B .* cos(Theta_ij);
+            
+%             % verify the PF calculation
+%             P = (GBThetaP * obj.data.Vm(:, snap)) .* obj.data.Vm(:, snap);
+%             deltaP = P - obj.data.P(:, snap);
+%             assert (sum(abs(deltaP)) <= 1e-6 );
+%             Q = (GBThetaQ * obj.data.Vm(:, snap)) .* obj.data.Vm(:, snap);
+%             deltaQ = Q - obj.data.Q(:, snap);
+%             assert (sum(abs(deltaQ)) <= 1e-6 );
+            
+            % G matrix
+            H_G = zeros(obj.numBus, obj.numBus);
+            H_G(bus, :) = obj.data.Vm(bus, snap) * obj.data.Vm(:, snap)' .* cos(theta_ij');
+            h_G = matToCol(obj, H_G);
+            assert (length(h_G) == obj.numFIM.G);
+            h(1:obj.numFIM.G) = h_G;
+            
+            % B matrix
+            H_B = zeros(obj.numBus, obj.numBus);
+            H_B(bus, :) = obj.data.Vm(bus, snap) * obj.data.Vm(:, snap)' .* sin(theta_ij');
+            h_B = matToCol(obj, H_B);
+            assert (length(h_B) == obj.numFIM.B);
+            h(obj.numFIM.G+1:obj.numFIM.G+obj.numFIM.B) = h_B;
+            
+            % Vm
+            % the first order term of other Vm
+            H_Vm = zeros(obj.numBus, obj.numSnap);
+            h_Vm = obj.data.Vm(bus, snap) * GBThetaP(:, bus);
+            % the second order term of Vm(bus)
+            h_Vm(bus) = 2*obj.data.Vm(bus, snap) * GBThetaP(bus, bus);
+            % the first order term of Vm(bus)
+            fOrderVm = obj.data.Vm(:, snap) .* GBThetaP(:, bus);
+            fOrderVm(bus) = 0;
+            h_Vm(bus) = h_Vm(bus) + sum(fOrderVm);
+            H_Vm(:, snap) = h_Vm;
+            % remove the source bus whose magnitude is not the state variable
+            H_Vm(1, :) = []; 
+            h_VmLarge = reshape(H_Vm', [], 1);
+            h(obj.numFIM.G+obj.numFIM.B+1:obj.numFIM.G+obj.numFIM.B+obj.numFIM.Vm) = h_VmLarge;
+            
+            % Va
+            H_Va = zeros(obj.numBus, obj.numSnap);
+            h_Va = obj.data.Vm(bus, snap) * obj.data.Vm(:, snap) .* GBThetaQ(:, bus);
+            h_Va(bus) = h_Va(bus)-sum(obj.data.Vm(bus, snap) * obj.data.Vm(:, snap) .* GBThetaQ(:, bus));
+            H_Va(:, snap) = h_Va;
+            % remove the source bus whose magnitude is not the state variable
+            H_Va(1, :) = []; 
+            h_VaLarge = reshape(H_Va', [], 1);
+            h(obj.numFIM.G+obj.numFIM.B+obj.numFIM.Vm+1:end) = h_VaLarge;
+            h = h / 
+            
+        end
+        
+        function h = matToCol(~, H)
+            % this method transform the matrix into the column of the half
+            % triangle.
+            H_up = tril(H, -1)'+triu(H);
+            n = size(H, 1);
+            N = (n + 1) * n / 2;
+            h = zeros(N, 1);
+            pt = 1;
+            for i = 1:n
+                h(pt:pt+n-i) = H_up(i, i:end);
+                pt = pt+n-i+1;
             end
         end
     end
