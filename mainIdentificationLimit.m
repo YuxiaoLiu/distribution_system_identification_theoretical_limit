@@ -3,8 +3,8 @@
 
 %% We set some hyper parameters
 clc; clear;
-caseName = 'case3_dist';     % the case name
-numSnap = 10;              % the number of snapshot
+caseName ='case3_dist';     % the case name    'case3_dist' 'case33bw'
+numSnap = 120;              % the number of snapshot
 range.P = 0.6;             % the deviation range of active load
 range.Q = 0.2;             % the deviation range of reactive load to active load
 

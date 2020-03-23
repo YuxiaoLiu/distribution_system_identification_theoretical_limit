@@ -138,15 +138,15 @@ classdef caseDistributionSystem
             
             % we first set the relative noise ratio, we assume the noise
             % ratio is the sigma/mean value
-            ratio.P = 0.005;
-            ratio.Q = 0.005;
-            ratio.Vm = 0.001;
-            ratio.Va = 0.001;
+            ratio.P = 0.001;
+            ratio.Q = 0.001;
+            ratio.Vm = 0.00001;
+            ratio.Va = 0.005;
             % we then have to set whether we have the measurement device
             obj.isMeasure.P = true(obj.numBus, 1);
             obj.isMeasure.Q = true(obj.numBus, 1);
             obj.isMeasure.Vm = true(obj.numBus, 1);
-            obj.isMeasure.Va = true(obj.numBus, 1); % false
+            obj.isMeasure.Va = false(obj.numBus, 1); % false
             obj.isMeasure.Vm(1) = false;
             obj.isMeasure.Va(1) = false;
             
@@ -155,7 +155,7 @@ classdef caseDistributionSystem
             obj.sigma.P = mean(abs(obj.data.P), 2) * ratio.P;
             obj.sigma.Q = mean(abs(obj.data.Q), 2) * ratio.Q;
             obj.sigma.Vm = mean(abs(obj.data.Vm), 2) * ratio.Vm;
-            obj.sigma.Va = mean(abs(obj.data.Vm), 2) * ratio.Vm;
+            obj.sigma.Va = mean(abs(obj.data.Va), 2) * ratio.Va;
             obj.sigma.Vm(1) = 0;
             obj.sigma.Va(1) = 0;
             
@@ -194,31 +194,35 @@ classdef caseDistributionSystem
             obj.FIM = zeros(obj.numFIM.Sum, obj.numFIM.Sum);
             
             % calculate the sub-matrix of P of all snapshots and all buses
-%             for i = 1:obj.numBus
-%                 if obj.isMeasure.P(i)
-%                     for j = 1:obj.numSnap
-%                         obj = buildFIMP(obj, i, j);
-%                     end
-%                 end
-%             end
+            for i = 1:obj.numBus
+                if obj.isMeasure.P(i)
+                    for j = 1:obj.numSnap
+                        obj = buildFIMP(obj, i, j);
+                    end
+                end
+            end
             % calculate the sub-matrix of Q of all snapshots and all buses
-%             for i = 1:obj.numBus
-%                 if obj.isMeasure.Q(i)
-%                     for j = 1:obj.numSnap
-%                         obj = buildFIMQ(obj, i, j);
-%                     end
-%                 end
-%             end
+            for i = 1:obj.numBus
+                if obj.isMeasure.Q(i)
+                    for j = 1:obj.numSnap
+                        obj = buildFIMQ(obj, i, j);
+                    end
+                end
+            end
             % calculate the sub-matrix of Vm of all snapshots and all buses
             for i = 1:obj.numBus
                 if obj.isMeasure.Vm(i)
-                    obj = buildFIMVm(obj, i);
+                    for j = 1:obj.numSnap
+                        obj = buildFIMVm(obj, i, j);
+                    end
                 end
             end
             % calculate the sub-matrix of Va of all snapshots and all buses
             for i = 1:obj.numBus
                 if obj.isMeasure.Va(i)
-                    obj = buildFIMVa(obj, i);
+                    for j = 1:obj.numSnap
+                        obj = buildFIMVa(obj, i, j);
+                    end
                 end
             end
         end
@@ -348,11 +352,11 @@ classdef caseDistributionSystem
             obj.FIM = obj.FIM + FIMQ;
         end
         
-        function obj = buildFIMVm(obj, bus)
+        function obj = buildFIMVm(obj, bus, snap)
             % This method build the Vm part of FIM a selected bus. 
             h = zeros(obj.numFIM.Sum, 1);
             H_Vm = zeros(obj.numBus, obj.numSnap);
-            H_Vm(bus, :) = 1 / obj.sigma.Vm(bus) * obj.numSnap;
+            H_Vm(bus, snap) = 1 / obj.sigma.Vm(bus);
             % remove the source bus whose magnitude is not the state variable
             H_Vm(1, :) = []; 
             h_VmLarge = reshape(H_Vm', [], 1);
@@ -362,11 +366,11 @@ classdef caseDistributionSystem
             obj.FIM = obj.FIM + FIMVm;
         end
         
-        function obj = buildFIMVa(obj, bus)
+        function obj = buildFIMVa(obj, bus, snap)
             % This method build the Va part of FIM a selected bus. 
             h = zeros(obj.numFIM.Sum, 1);
             H_Va = zeros(obj.numBus, obj.numSnap);
-            H_Va(bus, :) = 1 / obj.sigma.Va(bus) * obj.numSnap;
+            H_Va(bus, snap) = 1 / obj.sigma.Va(bus);
             % remove the source bus whose magnitude is not the state variable
             H_Va(1, :) = []; 
             h_VaLarge = reshape(H_Va', [], 1);
