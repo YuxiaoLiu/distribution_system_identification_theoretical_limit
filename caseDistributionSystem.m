@@ -194,21 +194,21 @@ classdef caseDistributionSystem
             obj.FIM = zeros(obj.numFIM.Sum, obj.numFIM.Sum);
             
             % calculate the sub-matrix of P of all snapshots and all buses
-            for i = 1:obj.numBus
-                if obj.isMeasure.P(i)
-                    for j = 1:obj.numSnap
-                        obj = buildFIMP(obj, i, j);
-                    end
-                end
-            end
+%             for i = 1:obj.numBus
+%                 if obj.isMeasure.P(i)
+%                     for j = 1:obj.numSnap
+%                         obj = buildFIMP(obj, i, j);
+%                     end
+%                 end
+%             end
             % calculate the sub-matrix of Q of all snapshots and all buses
-            for i = 1:obj.numBus
-                if obj.isMeasure.Q(i)
-                    for j = 1:obj.numSnap
-                        obj = buildFIMQ(obj, i, j);
-                    end
-                end
-            end
+%             for i = 1:obj.numBus
+%                 if obj.isMeasure.Q(i)
+%                     for j = 1:obj.numSnap
+%                         obj = buildFIMQ(obj, i, j);
+%                     end
+%                 end
+%             end
             % calculate the sub-matrix of Vm of all snapshots and all buses
             for i = 1:obj.numBus
                 if obj.isMeasure.Vm(i)
@@ -352,7 +352,7 @@ classdef caseDistributionSystem
             % This method build the Vm part of FIM a selected bus. 
             h = zeros(obj.numFIM.Sum, 1);
             H_Vm = zeros(obj.numBus, obj.numSnap);
-            H_Vm(bus, :) = 1 / obj.sigma.Vm(bus);
+            H_Vm(bus, :) = 1 / obj.sigma.Vm(bus) * obj.numSnap;
             % remove the source bus whose magnitude is not the state variable
             H_Vm(1, :) = []; 
             h_VmLarge = reshape(H_Vm', [], 1);
@@ -366,7 +366,7 @@ classdef caseDistributionSystem
             % This method build the Va part of FIM a selected bus. 
             h = zeros(obj.numFIM.Sum, 1);
             H_Va = zeros(obj.numBus, obj.numSnap);
-            H_Va(bus, :) = 1 / obj.sigma.Va(bus);
+            H_Va(bus, :) = 1 / obj.sigma.Va(bus) * obj.numSnap;
             % remove the source bus whose magnitude is not the state variable
             H_Va(1, :) = []; 
             h_VaLarge = reshape(H_Va', [], 1);
