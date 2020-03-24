@@ -147,21 +147,23 @@ classdef caseDistributionSystem
             
             % we first set the relative noise ratio, we assume the noise
             % ratio is the sigma/mean value
-            if nargin == 2
+            if nargin == 3
                 ratio = varargin{1};
-            elseif nargin == 1
+                obj.isMeasure = varargin{2};
+            else
                 ratio.P = 0.005;
                 ratio.Q = 0.005;
                 ratio.Vm = 0.00000001; % 0.0000001 0.00001
                 ratio.Va = 0.005;
             end
-            % we then configure where are the measurement devices
+            % we then have to set whether we have the measurement device
             obj.isMeasure.P = true(obj.numBus, 1);
             obj.isMeasure.Q = true(obj.numBus, 1);
             obj.isMeasure.Vm = true(obj.numBus, 1);
             obj.isMeasure.Va = true(obj.numBus, 1); % false
             obj.isMeasure.Vm(1) = false;
             obj.isMeasure.Va(1) = false;
+            
             % We assume there is no noise in the source bus. We set the
             % enlarge ratio of each rows of measurement noise.
             obj.sigma.P = mean(abs(obj.data.P), 2) * ratio.P;
