@@ -14,7 +14,12 @@ classdef caseDistributionSystem
         
         loadP               % the active load of each bus
         loadQ               % the reactive load of each bus
+        
         FIM                 % the fisher information matrix
+        FIMP                % the (sparse) FIM of active power injection
+        FIMQ                % the (sparse) FIM of reactive power injection
+        FIMVm               % the (sparse) FIM of voltage magnitude
+        FIMVa               % the (sparse) FIM of voltage angle
         
         data                % the data struct contains operation data
         sigma               % the variance of each meansurement noise
@@ -191,7 +196,12 @@ classdef caseDistributionSystem
             obj.numFIM.Vm = obj.numSnap * (obj.numBus - 1); % exclude the source bus
             obj.numFIM.Va = obj.numSnap * (obj.numBus - 1);
             obj.numFIM.Sum = obj.numFIM.G + obj.numFIM.B + obj.numFIM.Vm + obj.numFIM.Va;
+            
             obj.FIM = zeros(obj.numFIM.Sum, obj.numFIM.Sum);
+            obj.FIMP = sparse(obj.numFIM.Sum, obj.numFIM.Sum);
+            obj.FIMQ = sparse(obj.numFIM.Sum, obj.numFIM.Sum);
+            obj.FIMVm = sparse(obj.numFIM.Sum, obj.numFIM.Sum);
+            obj.FIMVa = sparse(obj.numFIM.Sum, obj.numFIM.Sum);
             
             % calculate the sub-matrix of P of all snapshots and all buses
             for i = 1:obj.numBus
@@ -201,6 +211,7 @@ classdef caseDistributionSystem
                     end
                 end
             end
+            obj.FIM = obj.FIM + full(obj.FIMP);
             % calculate the sub-matrix of Q of all snapshots and all buses
             for i = 1:obj.numBus
                 if obj.isMeasure.Q(i)
@@ -209,6 +220,7 @@ classdef caseDistributionSystem
                     end
                 end
             end
+            obj.FIM = obj.FIM + full(obj.FIMQ);
             % calculate the sub-matrix of Vm of all snapshots and all buses
             for i = 1:obj.numBus
                 if obj.isMeasure.Vm(i)
@@ -217,6 +229,7 @@ classdef caseDistributionSystem
                     end
                 end
             end
+            obj.FIM = obj.FIM + full(obj.FIMVm);
             % calculate the sub-matrix of Va of all snapshots and all buses
             for i = 1:obj.numBus
                 if obj.isMeasure.Va(i)
@@ -225,6 +238,7 @@ classdef caseDistributionSystem
                     end
                 end
             end
+            obj.FIM = obj.FIM + full(obj.FIMVa);
         end
         
         function obj = buildFIMP(obj, bus, snap)
@@ -235,7 +249,7 @@ classdef caseDistributionSystem
             % triangle, while the measurement function forms a whole
             % matrix.
             
-            h = zeros(obj.numFIM.Sum, 1);
+            h = sparse(obj.numFIM.Sum, 1);
             theta_ij = obj.data.Va(bus, snap) - obj.data.Va(:, snap);
             Theta_ij = repmat(obj.data.Va(:, snap), 1, obj.numBus) - repmat(obj.data.Va(:, snap)', obj.numBus, 1);
             % G_ij\cos(\Theta_ij)+B_ij\sin(\Theta_ij)
@@ -252,7 +266,7 @@ classdef caseDistributionSystem
 %             assert (sum(abs(deltaQ)) <= 1e-6 );
             
             % G matrix
-            H_G = zeros(obj.numBus, obj.numBus);
+            H_G = sparse(obj.numBus, obj.numBus);
             H_G(bus, :) = obj.data.Vm(bus, snap) * obj.data.Vm(:, snap)' .* cos(theta_ij');
             h_G = matToCol(obj, H_G);
             assert (length(h_G) == obj.numFIM.G);
@@ -293,14 +307,14 @@ classdef caseDistributionSystem
             
             % build FIMP
             h = h / obj.sigma.P(bus);
-            FIMP = h * h';
-            obj.FIM = obj.FIM + FIMP;
+            FIMPThis = h * h';
+            obj.FIMP = obj.FIMP + FIMPThis;
         end
         
         function obj = buildFIMQ(obj, bus, snap)
             % This method build the Q part of FIM a selected bus and a selected snapshot. 
             
-            h = zeros(obj.numFIM.Sum, 1);
+            h = sparse(obj.numFIM.Sum, 1);
             theta_ij = obj.data.Va(bus, snap) - obj.data.Va(:, snap);
             Theta_ij = repmat(obj.data.Va(:, snap), 1, obj.numBus) - repmat(obj.data.Va(:, snap)', obj.numBus, 1);
             % G_ij\cos(\Theta_ij)+B_ij\sin(\Theta_ij)
@@ -348,36 +362,36 @@ classdef caseDistributionSystem
             
             % build FIMP
             h = h / obj.sigma.Q(bus);
-            FIMQ = h * h';
-            obj.FIM = obj.FIM + FIMQ;
+            FIMQThis = h * h';
+            obj.FIMQ = obj.FIMQ + FIMQThis;
         end
         
         function obj = buildFIMVm(obj, bus, snap)
             % This method build the Vm part of FIM a selected bus. 
-            h = zeros(obj.numFIM.Sum, 1);
-            H_Vm = zeros(obj.numBus, obj.numSnap);
+            h = sparse(obj.numFIM.Sum, 1);
+            H_Vm = sparse(obj.numBus, obj.numSnap);
             H_Vm(bus, snap) = 1 / obj.sigma.Vm(bus);
             % remove the source bus whose magnitude is not the state variable
             H_Vm(1, :) = []; 
             h_VmLarge = reshape(H_Vm', [], 1);
             h(obj.numFIM.G+obj.numFIM.B+1:obj.numFIM.G+obj.numFIM.B+obj.numFIM.Vm) = h_VmLarge;
             
-            FIMVm = h * h';
-            obj.FIM = obj.FIM + FIMVm;
+            FIMVmThis = h * h';
+            obj.FIMVm = obj.FIMVm + FIMVmThis;
         end
         
         function obj = buildFIMVa(obj, bus, snap)
             % This method build the Va part of FIM a selected bus. 
-            h = zeros(obj.numFIM.Sum, 1);
-            H_Va = zeros(obj.numBus, obj.numSnap);
+            h = sparse(obj.numFIM.Sum, 1);
+            H_Va = sparse(obj.numBus, obj.numSnap);
             H_Va(bus, snap) = 1 / obj.sigma.Va(bus);
             % remove the source bus whose magnitude is not the state variable
             H_Va(1, :) = []; 
             h_VaLarge = reshape(H_Va', [], 1);
             h(obj.numFIM.G+obj.numFIM.B+obj.numFIM.Vm+1:end) = h_VaLarge;
             
-            FIMVa = h * h';
-            obj.FIM = obj.FIM + FIMVa;
+            FIMVaThis = h * h';
+            obj.FIM = obj.FIM + FIMVaThis;
         end
         
         function h = matToCol(~, H)
