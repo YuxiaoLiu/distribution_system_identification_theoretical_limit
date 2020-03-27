@@ -27,6 +27,7 @@ classdef caseDistributionSystem
         isMeasure           % whether we have a specific measurement device
         
         bound               % the bound of different parameters
+        admittanceOnly      % only calculate the G and B bound
     end
     
     methods
@@ -398,13 +399,28 @@ classdef caseDistributionSystem
             h(obj.numFIM.G+obj.numFIM.B+obj.numFIM.Vm+1:end) = h_VaLarge;
             
             FIMVaThis = h * h';
-            obj.FIM = obj.FIM + FIMVaThis;
+            obj.FIMVa = obj.FIMVa + FIMVaThis;
         end
         
-        function obj = calBound(obj)
+        function obj = calBound(obj, varargin)
             % this method calculate the bound from the FIM matrix;
 %             var = diag(inv(obj.FIM));
-            var = diag(obj.FIM\eye(size(obj.FIM)));
+            if nargin == 2
+                obj.admittanceOnly = varargin{1};
+            elseif nargin == 1
+                obj.admittanceOnly = false;
+            end
+            
+            % for [A B; B' C], we calculate A-B/C*B'
+            if obj.admittanceOnly
+                A = obj.FIM(1:obj.numFIM.G+obj.numFIM.B, 1:obj.numFIM.G+obj.numFIM.B);
+                B = obj.FIM(1:obj.numFIM.G+obj.numFIM.B, obj.numFIM.G+obj.numFIM.B+1:end);
+                C = obj.FIM(obj.numFIM.G+obj.numFIM.B+1:end, obj.numFIM.G+obj.numFIM.B+1:end);
+                obj.FIM = A - B/C*B';
+                var = diag(obj.FIM\eye(size(obj.FIM)));
+            else
+                var = diag(obj.FIM\eye(size(obj.FIM)));
+            end
 %             var2 = diag(pinv(obj.FIM)); % the pseudo inverse is loose
             if min(var) < 0
                 obj.bound.total = var;
@@ -414,10 +430,12 @@ classdef caseDistributionSystem
             end
             obj.bound.G = obj.bound.total(1:obj.numFIM.G);
             obj.bound.B = obj.bound.total(obj.numFIM.G+1:obj.numFIM.G+obj.numFIM.B);
-            obj.bound.Vm = obj.bound.total(obj.numFIM.G+obj.numFIM.B+1:obj.numFIM.G+obj.numFIM.B+obj.numFIM.Vm);
-            obj.bound.Va = obj.bound.total(obj.numFIM.G+obj.numFIM.B+obj.numFIM.Vm+1:obj.numFIM.Sum);
             obj.bound.G_relative = abs(obj.bound.G ./ matToCol(obj, obj.data.G));
             obj.bound.B_relative = abs(obj.bound.B ./ matToCol(obj, obj.data.B));
+            if ~obj.admittanceOnly
+                obj.bound.Vm = obj.bound.total(obj.numFIM.G+obj.numFIM.B+1:obj.numFIM.G+obj.numFIM.B+obj.numFIM.Vm);
+                obj.bound.Va = obj.bound.total(obj.numFIM.G+obj.numFIM.B+obj.numFIM.Vm+1:obj.numFIM.Sum);
+            end
         end
         
         function obj = outputBound(obj)
@@ -425,10 +443,12 @@ classdef caseDistributionSystem
             xlswrite(obj.addressOutput, obj.bound.total, 'total');
             xlswrite(obj.addressOutput, obj.bound.G, 'G');
             xlswrite(obj.addressOutput, obj.bound.B, 'B');
-            xlswrite(obj.addressOutput, obj.bound.Vm, 'Vm');
-            xlswrite(obj.addressOutput, obj.bound.Va, 'Va');
             xlswrite(obj.addressOutput, obj.bound.G_relative, 'G_relative');
             xlswrite(obj.addressOutput, obj.bound.B_relative, 'B_relative');
+            if ~obj.admittanceOnly
+                xlswrite(obj.addressOutput, obj.bound.Vm, 'Vm');
+                xlswrite(obj.addressOutput, obj.bound.Va, 'Va');
+            end
         end
         
         function h = matToCol(~, H)
