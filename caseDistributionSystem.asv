@@ -367,7 +367,7 @@ classdef caseDistributionSystem
             % Va
             H_Va = zeros(obj.numBus, obj.numSnap);
             h_Va = - obj.data.Vm(bus, snap) * obj.data.Vm(:, snap) .* GBThetaP(:, bus) / obj.k.va;
-            h_Va(bus) = h_Va(bus)+sum(obj.data.Vm(bus, snap) * obj.data.Vm(:, snap) .* GBThetaP(:, bus)) / obj.k.va;
+            h_Va(bus) = h_Va(bus)+sum(obj.data.Vm(bus, snap) * obj.data.Vm(:, snap) .* GBThetaP(:, bus));
             H_Va(:, snap) = h_Va;
             % remove the source bus whose magnitude is not the state variable
             H_Va(1, :) = []; 
@@ -384,7 +384,7 @@ classdef caseDistributionSystem
             % This method build the Vm part of FIM a selected bus. 
             h = sparse(obj.numFIM.Sum, 1);
             H_Vm = sparse(obj.numBus, obj.numSnap);
-            H_Vm(bus, snap) = 1 / obj.sigma.Vm(bus) / obj.k.vm;
+            H_Vm(bus, snap) = 1 / obj.sigma.Vm(bus);
             % remove the source bus whose magnitude is not the state variable
             H_Vm(1, :) = []; 
             h_VmLarge = reshape(H_Vm', [], 1);
@@ -398,7 +398,7 @@ classdef caseDistributionSystem
             % This method build the Va part of FIM a selected bus. 
             h = sparse(obj.numFIM.Sum, 1);
             H_Va = sparse(obj.numBus, obj.numSnap);
-            H_Va(bus, snap) = 1 / obj.sigma.Va(bus) / obj.k.va;
+            H_Va(bus, snap) = 1 / obj.sigma.Va(bus);
             % remove the source bus whose magnitude is not the state variable
             H_Va(1, :) = []; 
             h_VaLarge = reshape(H_Va', [], 1);
@@ -440,12 +440,8 @@ classdef caseDistributionSystem
             obj.bound.G_relative = abs(obj.bound.G ./ matToCol(obj, obj.data.G));
             obj.bound.B_relative = abs(obj.bound.B ./ matToCol(obj, obj.data.B));
             if ~obj.admittanceOnly
-                obj.bound.Vm = obj.bound.total(obj.numFIM.G+obj.numFIM.B+1:obj.numFIM.G+obj.numFIM.B+obj.numFIM.Vm) / obj.k.vm;
-                obj.bound.total(obj.numFIM.G+obj.numFIM.B+1:obj.numFIM.G+obj.numFIM.B+obj.numFIM.Vm) = ...
-                    obj.bound.total(obj.numFIM.G+obj.numFIM.B+1:obj.numFIM.G+obj.numFIM.B+obj.numFIM.Vm) / obj.k.vm;
-                obj.bound.Va = obj.bound.total(obj.numFIM.G+obj.numFIM.B+obj.numFIM.Vm+1:obj.numFIM.Sum) / obj.k.va;
-                obj.bound.total(obj.numFIM.G+obj.numFIM.B+obj.numFIM.Vm+1:obj.numFIM.Sum) = ...
-                    obj.bound.total(obj.numFIM.G+obj.numFIM.B+obj.numFIM.Vm+1:obj.numFIM.Sum) / obj.k.va;
+                obj.bound.Vm = obj.bound.total(obj.numFIM.G+obj.numFIM.B+1:obj.numFIM.G+obj.numFIM.B+obj.numFIM.Vm);
+                obj.bound.Va = obj.bound.total(obj.numFIM.G+obj.numFIM.B+obj.numFIM.Vm+1:obj.numFIM.Sum);
             end
         end
         
