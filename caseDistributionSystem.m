@@ -74,7 +74,7 @@ classdef caseDistributionSystem
         function obj = readLoad(obj)
             % this method read the prepocessed load data, aggregate the
             % data, and cut the data into the appropriate size
-            numAggregation = 5;     % aggregate serveral loads together
+            numAggregation = 5;     % aggregate serveral loads together 5
             loadRead = xlsread(obj.addressLoad);
             [numCust, numSnapRaw] = size(loadRead);
             numCustAggre = fix(numCust / numAggregation);
@@ -404,7 +404,7 @@ classdef caseDistributionSystem
         
         function obj = calBound(obj, varargin)
             % this method calculate the bound from the FIM matrix;
-%             var = diag(inv(obj.FIM));
+
             if nargin == 2
                 obj.admittanceOnly = varargin{1};
             elseif nargin == 1
@@ -421,6 +421,7 @@ classdef caseDistributionSystem
             else
                 var = diag(obj.FIM\eye(size(obj.FIM)));
             end
+%             var1 = diag(inv(obj.FIM));
 %             var2 = diag(pinv(obj.FIM)); % the pseudo inverse is loose
             if min(var) < 0
                 obj.bound.total = var;

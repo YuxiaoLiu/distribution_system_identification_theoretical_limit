@@ -5,11 +5,11 @@
 clc; clear;
 caseName = 'case33bw';     % the case name    'case3_dist' 'case33bw'
 numSnap = 120;             % the number of snapshot
-range.P = 0.6;             % the deviation range of active load
-range.Q = 0.2;             % the deviation range of reactive load to active load
+range.P = 0.6;             % the deviation range of active load 0.6
+range.Q = 0.2;             % the deviation range of reactive load to active load 0.2
 
 % the accuracy of measurement device
-ratio.P = 0.005;
+ratio.P = 0.005;%0.005
 ratio.Q = 0.005;
 ratio.Vm = 0.0001; % 0.0000001 0.000001--the maximum error
 ratio.Va = 0.0001;
