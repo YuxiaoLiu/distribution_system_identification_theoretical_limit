@@ -169,7 +169,8 @@ classdef caseDistributionSystem
             obj.sigma.P = mean(abs(obj.data.P), 2) * ratio.P;
             obj.sigma.Q = mean(abs(obj.data.Q), 2) * ratio.Q;
             obj.sigma.Vm = mean(abs(obj.data.Vm), 2) * ratio.Vm;
-            obj.sigma.Va = mean(abs(obj.data.Va), 2) * ratio.Va;
+            obj.sigma.Va = ones(obj.numBus, 1) * pi / 1800  * ratio.Va;
+%             obj.sigma.Va = mean(abs(obj.data.Va), 2) * ratio.Va;
             obj.sigma.Vm(1) = 0;
             obj.sigma.Va(1) = 0;
             
@@ -201,6 +202,8 @@ classdef caseDistributionSystem
             if nargin == 2
                 obj.k = varargin{1};
             elseif nargin == 1
+                obj.k.G = 5;
+                obj.k.B = 10;
                 obj.k.vm = 10;
                 obj.k.va = 1000;
             end
@@ -281,14 +284,14 @@ classdef caseDistributionSystem
             
             % G matrix
             H_G = sparse(obj.numBus, obj.numBus);
-            H_G(bus, :) = obj.data.Vm(bus, snap) * obj.data.Vm(:, snap)' .* cos(theta_ij');
+            H_G(bus, :) = obj.data.Vm(bus, snap) * obj.data.Vm(:, snap)' .* cos(theta_ij') / obj.k.G;
             h_G = matToCol(obj, H_G);
             assert (length(h_G) == obj.numFIM.G);
             h(1:obj.numFIM.G) = h_G;
             
             % B matrix
             H_B = zeros(obj.numBus, obj.numBus);
-            H_B(bus, :) = obj.data.Vm(bus, snap) * obj.data.Vm(:, snap)' .* sin(theta_ij');
+            H_B(bus, :) = obj.data.Vm(bus, snap) * obj.data.Vm(:, snap)' .* sin(theta_ij') / obj.k.B;
             h_B = matToCol(obj, H_B);
             assert (length(h_B) == obj.numFIM.B);
             h(obj.numFIM.G+1:obj.numFIM.G+obj.numFIM.B) = h_B;
@@ -338,13 +341,13 @@ classdef caseDistributionSystem
             
             % G matrix
             H_G = zeros(obj.numBus, obj.numBus);
-            H_G(bus, :) = obj.data.Vm(bus, snap) * obj.data.Vm(:, snap)' .* sin(theta_ij');
+            H_G(bus, :) = obj.data.Vm(bus, snap) * obj.data.Vm(:, snap)' .* sin(theta_ij') / obj.k.G;
             h_G = matToCol(obj, H_G);
             h(1:obj.numFIM.G) = h_G;
             
             % B matrix
             H_B = zeros(obj.numBus, obj.numBus);
-            H_B(bus, :) = - obj.data.Vm(bus, snap) * obj.data.Vm(:, snap)' .* cos(theta_ij');
+            H_B(bus, :) = - obj.data.Vm(bus, snap) * obj.data.Vm(:, snap)' .* cos(theta_ij') / obj.k.B;
             h_B = matToCol(obj, H_B);
             h(obj.numFIM.G+1:obj.numFIM.G+obj.numFIM.B) = h_B;
             
@@ -435,8 +438,10 @@ classdef caseDistributionSystem
             else
                 obj.bound.total = sqrt(var);
             end
-            obj.bound.G = obj.bound.total(1:obj.numFIM.G);
-            obj.bound.B = obj.bound.total(obj.numFIM.G+1:obj.numFIM.G+obj.numFIM.B);
+            obj.bound.G = obj.bound.total(1:obj.numFIM.G) / obj.k.G;
+            obj.bound.total(1:obj.numFIM.G) = obj.bound.total(1:obj.numFIM.G) / obj.k.G;
+            obj.bound.B = obj.bound.total(obj.numFIM.G+1:obj.numFIM.G+obj.numFIM.B) / obj.k.B;
+            obj.bound.total(obj.numFIM.G+1:obj.numFIM.G+obj.numFIM.B) = obj.bound.total(obj.numFIM.G+1:obj.numFIM.G+obj.numFIM.B) / obj.k.B;
             obj.bound.G_relative = abs(obj.bound.G ./ matToCol(obj, obj.data.G));
             obj.bound.B_relative = abs(obj.bound.B ./ matToCol(obj, obj.data.B));
             if ~obj.admittanceOnly
