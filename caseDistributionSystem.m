@@ -274,13 +274,13 @@ classdef caseDistributionSystem
             % G_ij\sin(\Theta_ij)-B_ij\cos(\Theta_ij)
             GBThetaQ = obj.data.G .* sin(Theta_ij) - obj.data.B .* cos(Theta_ij);
             
-%             % verify the PF calculation
-%             P = (GBThetaP * obj.data.Vm(:, snap)) .* obj.data.Vm(:, snap);
-%             deltaP = P - obj.data.P(:, snap);
-%             assert (sum(abs(deltaP)) <= 1e-6 );
-%             Q = (GBThetaQ * obj.data.Vm(:, snap)) .* obj.data.Vm(:, snap);
-%             deltaQ = Q - obj.data.Q(:, snap);
-%             assert (sum(abs(deltaQ)) <= 1e-6 );
+            % verify the PF calculation
+            P = (GBThetaP * obj.data.Vm(:, snap)) .* obj.data.Vm(:, snap);
+            deltaP = P - obj.data.P(:, snap);
+            assert (sum(abs(deltaP)) <= 1e-6 );
+            Q = (GBThetaQ * obj.data.Vm(:, snap)) .* obj.data.Vm(:, snap);
+            deltaQ = Q - obj.data.Q(:, snap);
+            assert (sum(abs(deltaQ)) <= 1e-6 );
             
             % G matrix
             H_G = sparse(obj.numBus, obj.numBus);
@@ -377,7 +377,7 @@ classdef caseDistributionSystem
             h_VaLarge = reshape(H_Va', [], 1);
             h(obj.numFIM.G+obj.numFIM.B+obj.numFIM.Vm+1:end) = h_VaLarge;
             
-            % build FIMP
+            % build FIMQ
             h = h / obj.sigma.Q(bus);
             FIMQThis = h * h';
             obj.FIMQ = obj.FIMQ + FIMQThis;
@@ -429,15 +429,22 @@ classdef caseDistributionSystem
                 var = diag(obj.FIM\eye(size(obj.FIM)));
             else
                 var = diag(obj.FIM\eye(size(obj.FIM)));
+%                 % use the svd method
+%                 [u,s,v] = svd(obj.FIM);
+%                 cov2 = v * diag(1./diag(s)) * u';
+%                 var2 = diag(cov2);
             end
-%             var1 = diag(inv(obj.FIM));
-%             var2 = diag(pinv(obj.FIM)); % the pseudo inverse is loose
-            if min(var) < 0
+            [~,s,~] = svd(obj.FIM);
+            S = diag(s);
+            tol = S(end-50);
+            while min(var) < 0
                 obj.bound.total = var;
-                fprintf('The bound has negative value. Current situation cannot provide a satisfactory estimation.');
-            else
-                obj.bound.total = sqrt(var);
+                fprintf('The bound has negative value.\n');
+                fprintf('We use pseudo inverse instead.\n');
+                var = diag(pinv(obj.FIM, tol));
+                tol = tol * 1.5;
             end
+            obj.bound.total = sqrt(var);
             obj.bound.G = obj.bound.total(1:obj.numFIM.G) / obj.k.G;
             obj.bound.total(1:obj.numFIM.G) = obj.bound.total(1:obj.numFIM.G) / obj.k.G;
             obj.bound.B = obj.bound.total(obj.numFIM.G+1:obj.numFIM.G+obj.numFIM.B) / obj.k.B;
