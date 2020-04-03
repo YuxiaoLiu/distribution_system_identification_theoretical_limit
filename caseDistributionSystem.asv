@@ -154,7 +154,7 @@ classdef caseDistributionSystem
             elseif nargin == 1
                 ratio.P = 0.005;
                 ratio.Q = 0.005;
-                ratio.Vm = 0.00000001; % 0.0000001 0.00001
+                ratio.Vm = 0.005; % 0.0000001 0.00001
                 ratio.Va = 0.005;
             end
             % we then configure where are the measurement devices
@@ -164,6 +164,9 @@ classdef caseDistributionSystem
             obj.isMeasure.Va = false(obj.numBus, 1); % false
             obj.isMeasure.Vm(1) = false;
             obj.isMeasure.Va(1) = false;
+            % Set the tolerance of the modified Cholesky decomposition
+            if any(obj.isMeasure.Va) % we have the measurement of Va
+            obj.tol = 0.45;
             % We assume there is no noise in the source bus. We set the
             % enlarge ratio of each rows of measurement noise.
             obj.sigma.P = mean(abs(obj.data.P), 2) * ratio.P;
@@ -436,9 +439,11 @@ classdef caseDistributionSystem
             end
             if min(var) < 0
                 eigen = eig(obj.FIM);
-                U = chol(obj.FIM+abs(eigen(1))*eye(size(obj.FIM)));
+                U = chol(obj.FIM+abs(eigen(1)*0.45)*eye(size(obj.FIM)));%0.448
                 Uinv = inv(U);
-                
+                var = diag(Uinv * Uinv');
+                fprintf('The bound has negative value.\n');
+                fprintf('We use the modified Cholesky decomposition instead.\n');
             end
             
 %             [~,s,~] = svd(obj.FIM);

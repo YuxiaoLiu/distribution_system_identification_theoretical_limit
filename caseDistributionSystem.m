@@ -29,6 +29,7 @@ classdef caseDistributionSystem
         bound               % the bound of different parameters
         admittanceOnly      % only calculate the G and B bound
         k                   % the enlarge factor to maintain the numerical stability
+        tol                 % the tolerance of the modified Cholesky decomposition
     end
     
     methods
@@ -154,7 +155,7 @@ classdef caseDistributionSystem
             elseif nargin == 1
                 ratio.P = 0.005;
                 ratio.Q = 0.005;
-                ratio.Vm = 0.00000001; % 0.0000001 0.00001
+                ratio.Vm = 0.005; % 0.0000001 0.00001
                 ratio.Va = 0.005;
             end
             % we then configure where are the measurement devices
@@ -164,6 +165,12 @@ classdef caseDistributionSystem
             obj.isMeasure.Va = false(obj.numBus, 1); % false
             obj.isMeasure.Vm(1) = false;
             obj.isMeasure.Va(1) = false;
+            % Set the tolerance of the modified Cholesky decomposition
+            if any(obj.isMeasure.Va) % we have the measurement of Va
+                obj.tol = 0.45;
+            else
+                obj.tol = 0.77;
+            end
             % We assume there is no noise in the source bus. We set the
             % enlarge ratio of each rows of measurement noise.
             obj.sigma.P = mean(abs(obj.data.P), 2) * ratio.P;
@@ -434,13 +441,17 @@ classdef caseDistributionSystem
 %                 cov2 = v * diag(1./diag(s)) * u';
 %                 var2 = diag(cov2);
             end
-            if min(var) < 0
-                eigen = eig(obj.FIM);
-                U = chol(obj.FIM+abs(eigen(1))*eye(size(obj.FIM)));
-                Uinv = inv(U);
-                var = diag(Uinv * Uinv');
+            while min(var) < 0
                 fprintf('The bound has negative value.\n');
                 fprintf('We use the modified Cholesky decomposition instead.\n');
+                try
+                    eigen = eig(obj.FIM);
+                    U = chol(obj.FIM+abs(eigen(1)*obj.tol)*eye(size(obj.FIM)));
+                    Uinv = inv(U);
+                    var = diag(Uinv * Uinv');
+                catch
+                    obj.tol = obj.tol * 1.1;
+                end
             end
             
 %             [~,s,~] = svd(obj.FIM);
