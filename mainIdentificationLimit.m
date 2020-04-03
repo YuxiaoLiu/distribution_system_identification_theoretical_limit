@@ -9,10 +9,10 @@ range.P = 0.6;             % the deviation range of active load 0.6
 range.Q = 0.2;             % the deviation range of reactive load to active load 0.2
 
 % the accuracy of measurement device
-ratio.P = 0.05;%0.005
-ratio.Q = 0.05;
-ratio.Vm = 0.01;%0.000001; % 0.0000001 0.000001--the maximum error
-ratio.Va = 0.01;%0.000005
+ratio.P = 0.1;%0.005
+ratio.Q = 0.1;
+ratio.Vm = 0.1;%0.000001; % 0.0000001 0.000001--the maximum error
+ratio.Va = 0.1;%0.000005
 
 % if we only compute the bound of admittance matrix
 admittanceOnly = false;

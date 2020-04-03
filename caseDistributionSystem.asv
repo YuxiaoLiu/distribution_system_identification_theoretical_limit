@@ -438,9 +438,7 @@ classdef caseDistributionSystem
                 eigen = eig(obj.FIM);
                 U = chol(obj.FIM+abs(eigen(1))*eye(size(obj.FIM)));
                 Uinv = inv(U);
-                var = diag(Uinv * Uinv');
-                fprintf('The bound has negative value.\n');
-                fprintf('We use the modified Cholesky decomposition instead.\n');
+                
             end
             
 %             [~,s,~] = svd(obj.FIM);
