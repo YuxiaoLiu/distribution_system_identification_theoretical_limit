@@ -162,7 +162,7 @@ classdef caseDistributionSystem
             obj.isMeasure.P = true(obj.numBus, 1);
             obj.isMeasure.Q = true(obj.numBus, 1);
             obj.isMeasure.Vm = true(obj.numBus, 1);
-            obj.isMeasure.Va = false(obj.numBus, 1); % false
+            obj.isMeasure.Va = true(obj.numBus, 1); % false
             obj.isMeasure.Vm(1) = false;
             obj.isMeasure.Va(1) = false;
             % Set the tolerance of the modified Cholesky decomposition
@@ -441,18 +441,25 @@ classdef caseDistributionSystem
 %                 cov2 = v * diag(1./diag(s)) * u';
 %                 var2 = diag(cov2);
             end
-            while min(var) < 0
-                fprintf('The bound has negative value.\n');
-                fprintf('We use the modified Cholesky decomposition instead.\n');
-                try
-                    eigen = eig(obj.FIM);
-                    U = chol(obj.FIM+abs(eigen(1)*obj.tol)*eye(size(obj.FIM)));
-                    Uinv = inv(U);
-                    var = diag(Uinv * Uinv');
-                catch
-                    obj.tol = obj.tol * 1.1;
-                end
+            if min(var) < 0
+                var = abs(var);
+                fprintf('We use the absolute value of the variance.\n');
             end
+%             while min(var) < 0
+%                 fprintf('The bound has negative value.');
+%                 fprintf('The first var value is %f.\n', var(1))
+%                 fprintf('We use the modified Cholesky decomposition instead.');
+%                 
+%                 try
+%                     eigen = eig(obj.FIM);
+%                     fprintf('The current tolerance is %f.\n', eigen(1)*obj.tol);
+%                     U = chol(obj.FIM+abs(eigen(1)*obj.tol)*eye(size(obj.FIM)));
+%                     Uinv = inv(U);
+%                     var = diag(Uinv * Uinv');
+%                 catch
+%                     obj.tol = obj.tol * 1.1;
+%                 end
+%             end
             
 %             [~,s,~] = svd(obj.FIM);
 %             S = diag(s);
