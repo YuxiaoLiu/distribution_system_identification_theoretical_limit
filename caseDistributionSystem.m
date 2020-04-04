@@ -30,6 +30,11 @@ classdef caseDistributionSystem
         admittanceOnly      % only calculate the G and B bound
         k                   % the enlarge factor to maintain the numerical stability
         tol                 % the tolerance of the modified Cholesky decomposition
+        
+        topoPrior           % the prior topology knowledge (if two buses are disconnected) true-has topo prior
+        topoTol             % the tolerance of topology identification (forcing the small value to zero)
+        boundIter           % the iteration history of the bounds
+        acc                 % the accuracy of topology identification
     end
     
     methods
@@ -140,6 +145,7 @@ classdef caseDistributionSystem
             Y = makeYbus(obj.mpc);
             data_.G = real(full(Y));
             data_.B = imag(full(Y));
+            data_.GBzero = data_.G == 0;
             obj.data = data_;
         end
         
@@ -162,7 +168,7 @@ classdef caseDistributionSystem
             obj.isMeasure.P = true(obj.numBus, 1);
             obj.isMeasure.Q = true(obj.numBus, 1);
             obj.isMeasure.Vm = true(obj.numBus, 1);
-            obj.isMeasure.Va = true(obj.numBus, 1); % false
+            obj.isMeasure.Va = false(obj.numBus, 1); % false
             obj.isMeasure.Vm(1) = false;
             obj.isMeasure.Va(1) = false;
             % Set the tolerance of the modified Cholesky decomposition
@@ -421,21 +427,33 @@ classdef caseDistributionSystem
         function obj = calBound(obj, varargin)
             % this method calculate the bound from the FIM matrix;
 
-            if nargin == 2
+            if nargin == 3
                 obj.admittanceOnly = varargin{1};
+                obj.topoPrior = varargin{2};
+            elseif nargin == 2
+                obj.admittanceOnly = varargin{1};
+                obj.topoPrior = false(obj.numBus, obj.numBus);
             elseif nargin == 1
                 obj.admittanceOnly = false;
+                obj.topoPrior = false(obj.numBus, obj.numBus);
             end
+            
+            % build the indexes we really care about
+            delCols = [matToCol(obj,obj.topoPrior)>1e-4;matToCol(obj,obj.topoPrior)>1e-4];
+            obj.numFIM.index = true(obj.numFIM.Sum, 1);
+            obj.numFIM.index(delCols) = false;
+            obj.numFIM.del = sum(delCols)/2;
             
             % for [A B; B' C], we calculate A-B/C*B'
             if obj.admittanceOnly
+                obj.numFIM.index = obj.numFIM.index(1:obj.numFIM.G+obj.numFIM.B);
                 A = obj.FIM(1:obj.numFIM.G+obj.numFIM.B, 1:obj.numFIM.G+obj.numFIM.B);
                 B = obj.FIM(1:obj.numFIM.G+obj.numFIM.B, obj.numFIM.G+obj.numFIM.B+1:end);
                 C = obj.FIM(obj.numFIM.G+obj.numFIM.B+1:end, obj.numFIM.G+obj.numFIM.B+1:end);
                 obj.FIM = A - B/C*B';
-                var = diag(obj.FIM\eye(size(obj.FIM)));
+                var = diag(obj.FIM(obj.numFIM.index, obj.numFIM.index)\eye(sum(obj.numFIM.index)));
             else
-                var = diag(obj.FIM\eye(size(obj.FIM)));
+                var = diag(obj.FIM(obj.numFIM.index, obj.numFIM.index)\eye(sum(obj.numFIM.index)));
 %                 % use the svd method
 %                 [u,s,v] = svd(obj.FIM);
 %                 cov2 = v * diag(1./diag(s)) * u';
@@ -472,19 +490,34 @@ classdef caseDistributionSystem
 %                 tol = tol * 1.5;
 %             end
             obj.bound.total = sqrt(var);
-            obj.bound.G = obj.bound.total(1:obj.numFIM.G) / obj.k.G;
-            obj.bound.total(1:obj.numFIM.G) = obj.bound.total(1:obj.numFIM.G) / obj.k.G;
-            obj.bound.B = obj.bound.total(obj.numFIM.G+1:obj.numFIM.G+obj.numFIM.B) / obj.k.B;
-            obj.bound.total(obj.numFIM.G+1:obj.numFIM.G+obj.numFIM.B) = obj.bound.total(obj.numFIM.G+1:obj.numFIM.G+obj.numFIM.B) / obj.k.B;
-            obj.bound.G_relative = abs(obj.bound.G ./ matToCol(obj, obj.data.G));
-            obj.bound.B_relative = abs(obj.bound.B ./ matToCol(obj, obj.data.B));
+            boundG = zeros(obj.numFIM.G, 1);
+            boundG(obj.numFIM.index(1:obj.numFIM.G)) = obj.bound.total(1:obj.numFIM.G-obj.numFIM.del) / obj.k.G;
+            obj.bound.total(1:obj.numFIM.G-obj.numFIM.del) = obj.bound.total(1:obj.numFIM.G-obj.numFIM.del) / obj.k.G;
+            obj.bound.G = colToMat(obj, boundG, obj.numBus);
+            
+            boundB = zeros(obj.numFIM.B, 1);
+            boundB(obj.numFIM.index(1:obj.numFIM.G)) = ...
+                obj.bound.total(obj.numFIM.G+1-obj.numFIM.del:obj.numFIM.G+obj.numFIM.B-2*obj.numFIM.del) / obj.k.B;
+            obj.bound.total(obj.numFIM.G+1-obj.numFIM.del:obj.numFIM.G+obj.numFIM.B-2*obj.numFIM.del) = ...
+                obj.bound.total(obj.numFIM.G+1-obj.numFIM.del:obj.numFIM.G+obj.numFIM.B-2*obj.numFIM.del) / obj.k.B;
+            obj.bound.B = colToMat(obj, boundB, obj.numBus);
+            
+            obj.bound.G_relative = abs(obj.bound.G ./ repmat(diag(obj.data.G), 1, obj.numBus));
+            obj.bound.B_relative = abs(obj.bound.B ./ repmat(diag(obj.data.B), 1, obj.numBus));
+            
             if ~obj.admittanceOnly
-                obj.bound.Vm = obj.bound.total(obj.numFIM.G+obj.numFIM.B+1:obj.numFIM.G+obj.numFIM.B+obj.numFIM.Vm) / obj.k.vm;
-                obj.bound.total(obj.numFIM.G+obj.numFIM.B+1:obj.numFIM.G+obj.numFIM.B+obj.numFIM.Vm) = ...
-                    obj.bound.total(obj.numFIM.G+obj.numFIM.B+1:obj.numFIM.G+obj.numFIM.B+obj.numFIM.Vm) / obj.k.vm;
-                obj.bound.Va = obj.bound.total(obj.numFIM.G+obj.numFIM.B+obj.numFIM.Vm+1:obj.numFIM.Sum) / obj.k.va;
-                obj.bound.total(obj.numFIM.G+obj.numFIM.B+obj.numFIM.Vm+1:obj.numFIM.Sum) = ...
-                    obj.bound.total(obj.numFIM.G+obj.numFIM.B+obj.numFIM.Vm+1:obj.numFIM.Sum) / obj.k.va;
+                obj.bound.Vm = ...
+                    obj.bound.total(obj.numFIM.G+obj.numFIM.B+1-2*obj.numFIM.del...
+                    :obj.numFIM.G+obj.numFIM.B+obj.numFIM.Vm-2*obj.numFIM.del) / obj.k.vm;
+                obj.bound.total(obj.numFIM.G+obj.numFIM.B+1-2*obj.numFIM.del...
+                    :obj.numFIM.G+obj.numFIM.B+obj.numFIM.Vm-2*obj.numFIM.del)...
+                    = obj.bound.Vm;
+                obj.bound.Va = ...
+                    obj.bound.total(obj.numFIM.G+obj.numFIM.B+obj.numFIM.Vm+1-2*obj.numFIM.del...
+                    :obj.numFIM.Sum-2*obj.numFIM.del) / obj.k.va;
+                obj.bound.total(obj.numFIM.G+obj.numFIM.B+obj.numFIM.Vm+1-2*obj.numFIM.del...
+                    :obj.numFIM.Sum-2*obj.numFIM.del)...
+                    = obj.bound.Va;
             end
         end
         
@@ -501,6 +534,34 @@ classdef caseDistributionSystem
             end
         end
         
+        function obj = updateTopo(obj, varargin)
+            % This method update the topology and calculate the bound again
+            if nargin == 3
+                obj.topoTol = varargin{1};
+                obj.admittanceOnly = varargin{2};
+            elseif nargin == 2
+                obj.topoTol = varargin{1};
+                obj.admittanceOnly = false;
+            elseif nargin == 1
+                obj.topoTol = 0.05;
+                obj.admittanceOnly = false;
+            end
+            obj.topoPrior = false(obj.numBus, obj.numBus);
+            numDisconnect = 1;
+            % we should use measurement data to calculate the bound to
+            % guarantee we don't disconnect some real branches
+            while (numDisconnect > 1e-4)
+                obj = calBound(obj, obj.admittanceOnly, obj.topoPrior);
+                obj.boundIter = [obj.boundIter; obj.bound];
+                topoPriorNext = obj.data.GBzero & (obj.bound.G_relative < obj.topoTol);
+                numDisconnect = sum(sum(triu(topoPriorNext) - triu(obj.topoPrior)));
+                fprintf('We disconnect %d branches\n', numDisconnect);
+                obj.topoPrior = triu(topoPriorNext) | triu(topoPriorNext, -1)';
+            end
+            obj.acc = sum(sum(obj.data.G~=0))/sum(sum(obj.bound.G~=0));
+            fprintf('The theoretical topology identification limit is %f', obj.acc);
+        end
+        
         function h = matToCol(~, H)
             % this method transform the matrix into the column of the half
             % triangle.
@@ -513,6 +574,18 @@ classdef caseDistributionSystem
                 h(pt:pt+n-i) = H_up(i, i:end);
                 pt = pt+n-i+1;
             end
+        end
+        
+        function H = colToMat(~, h, n)
+            % This method transform the column of half triangle to a
+            % symmetric matrix
+            H = zeros(n, n);
+            pt = 1;
+            for i = 1:n
+                H(i, i:end) = h(pt:pt+n-i);
+                pt = pt+n-i+1;
+            end
+            H = H + triu(H, 1)';
         end
     end
 end
