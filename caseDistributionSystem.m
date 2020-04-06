@@ -1,4 +1,4 @@
-classdef caseDistributionSystem
+classdef caseDistributionSystem < handle
     % This is the class of distribution system
     
     properties
@@ -299,14 +299,14 @@ classdef caseDistributionSystem
             % G matrix
             H_G = sparse(obj.numBus, obj.numBus);
             H_G(bus, :) = obj.data.Vm(bus, snap) * obj.data.Vm(:, snap)' .* cos(theta_ij') / obj.k.G;
-            h_G = matToCol(obj, H_G);
+            h_G = obj.matToCol(H_G);
             assert (length(h_G) == obj.numFIM.G);
             h(1:obj.numFIM.G) = h_G;
             
             % B matrix
             H_B = zeros(obj.numBus, obj.numBus);
             H_B(bus, :) = obj.data.Vm(bus, snap) * obj.data.Vm(:, snap)' .* sin(theta_ij') / obj.k.B;
-            h_B = matToCol(obj, H_B);
+            h_B = obj.matToCol(H_B);
             assert (length(h_B) == obj.numFIM.B);
             h(obj.numFIM.G+1:obj.numFIM.G+obj.numFIM.B) = h_B;
             
@@ -356,13 +356,13 @@ classdef caseDistributionSystem
             % G matrix
             H_G = zeros(obj.numBus, obj.numBus);
             H_G(bus, :) = obj.data.Vm(bus, snap) * obj.data.Vm(:, snap)' .* sin(theta_ij') / obj.k.G;
-            h_G = matToCol(obj, H_G);
+            h_G = obj.matToCol(H_G);
             h(1:obj.numFIM.G) = h_G;
             
             % B matrix
             H_B = zeros(obj.numBus, obj.numBus);
             H_B(bus, :) = - obj.data.Vm(bus, snap) * obj.data.Vm(:, snap)' .* cos(theta_ij') / obj.k.B;
-            h_B = matToCol(obj, H_B);
+            h_B = obj.matToCol(H_B);
             h(obj.numFIM.G+1:obj.numFIM.G+obj.numFIM.B) = h_B;
             
             % Vm
@@ -440,7 +440,7 @@ classdef caseDistributionSystem
             end
             
             % build the indexes we really care about
-            delCols = [matToCol(obj,obj.topoPrior)>1e-4;matToCol(obj,obj.topoPrior)>1e-4];
+            delCols = [obj.matToCol(obj.topoPrior)>1e-4;obj.matToCol(obj.topoPrior)>1e-4];
             obj.numFIM.index = true(obj.numFIM.Sum, 1);
             obj.numFIM.index(delCols) = false;
             obj.numFIM.del = sum(delCols)/2;
@@ -494,14 +494,14 @@ classdef caseDistributionSystem
             boundG = zeros(obj.numFIM.G, 1);
             boundG(obj.numFIM.index(1:obj.numFIM.G)) = obj.bound.total(1:obj.numFIM.G-obj.numFIM.del) / obj.k.G;
             obj.bound.total(1:obj.numFIM.G-obj.numFIM.del) = obj.bound.total(1:obj.numFIM.G-obj.numFIM.del) / obj.k.G;
-            obj.bound.G = colToMat(obj, boundG, obj.numBus);
+            obj.bound.G = obj.colToMat(boundG, obj.numBus);
             
             boundB = zeros(obj.numFIM.B, 1);
             boundB(obj.numFIM.index(1:obj.numFIM.G)) = ...
                 obj.bound.total(obj.numFIM.G+1-obj.numFIM.del:obj.numFIM.G+obj.numFIM.B-2*obj.numFIM.del) / obj.k.B;
             obj.bound.total(obj.numFIM.G+1-obj.numFIM.del:obj.numFIM.G+obj.numFIM.B-2*obj.numFIM.del) = ...
                 obj.bound.total(obj.numFIM.G+1-obj.numFIM.del:obj.numFIM.G+obj.numFIM.B-2*obj.numFIM.del) / obj.k.B;
-            obj.bound.B = colToMat(obj, boundB, obj.numBus);
+            obj.bound.B = obj.colToMat(boundB, obj.numBus);
             
             obj.bound.G_relative = abs(obj.bound.G ./ repmat(diag(obj.data.G), 1, obj.numBus));
             obj.bound.B_relative = abs(obj.bound.B ./ repmat(diag(obj.data.B), 1, obj.numBus));
@@ -583,20 +583,24 @@ classdef caseDistributionSystem
             boundG = zeros(obj.numFIM.G, 1);
             boundG(obj.numFIM.index(1:obj.numFIM.G)) = obj.bound1.total(1:obj.numFIM.G-obj.numFIM.del) / obj.k.G;
             obj.bound1.total(1:obj.numFIM.G-obj.numFIM.del) = obj.bound1.total(1:obj.numFIM.G-obj.numFIM.del) / obj.k.G;
-            obj.bound1.G = colToMat(obj, boundG, obj.numBus);
+            obj.bound1.G = colToMat(boundG, obj.numBus);
             
             boundB = zeros(obj.numFIM.B, 1);
             boundB(obj.numFIM.index(1:obj.numFIM.G)) = ...
                 obj.bound1.total(obj.numFIM.G+1-obj.numFIM.del:obj.numFIM.G+obj.numFIM.B-2*obj.numFIM.del) / obj.k.B;
             obj.bound1.total(obj.numFIM.G+1-obj.numFIM.del:obj.numFIM.G+obj.numFIM.B-2*obj.numFIM.del) = ...
                 obj.bound1.total(obj.numFIM.G+1-obj.numFIM.del:obj.numFIM.G+obj.numFIM.B-2*obj.numFIM.del) / obj.k.B;
-            obj.bound1.B = colToMat(obj, boundB, obj.numBus);
+            obj.bound1.B = colToMat(boundB, obj.numBus);
             
             obj.bound1.G_relative = abs(obj.bound1.G ./ repmat(diag(obj.data.G), 1, obj.numBus));
             obj.bound1.B_relative = abs(obj.bound1.B ./ repmat(diag(obj.data.B), 1, obj.numBus));
         end
         
-        function h = matToCol(~, H)
+    end
+    
+    methods (Static)
+        
+        function h = matToCol(H)
             % this method transform the matrix into the column of the half
             % triangle.
             H_up = tril(H, -1)'+triu(H);
@@ -610,7 +614,7 @@ classdef caseDistributionSystem
             end
         end
         
-        function H = colToMat(~, h, n)
+        function H = colToMat(h, n)
             % This method transform the column of half triangle to a
             % symmetric matrix
             H = zeros(n, n);

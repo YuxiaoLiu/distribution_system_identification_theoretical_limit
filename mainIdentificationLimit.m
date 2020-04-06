@@ -40,7 +40,7 @@ end
 
 profile on;
 %% We generate the power flow data
-caseDS = caseDistributionSystem(caseName, numSnap, range);
+caseDS = caseDistributionSystemMeasure(caseName, numSnap, range);
 caseDS = caseDS.readLoad;
 caseDS = caseDS.genOperateData;
 

@@ -7,10 +7,9 @@ classdef caseDistributionSystemMeasure < caseDistributionSystem
     end
     
     methods
-        function obj = caseDistributionSystemMeasure(inputArg1,inputArg2)
-            %UNTITLED 构造此类的实例
-            %   此处显示详细说明
-            obj.Property1 = inputArg1 + inputArg2;
+        function obj = caseDistributionSystemMeasure(caseName, numSnap, range)
+            % the construction function
+            obj = obj@caseDistributionSystem(caseName, numSnap, range);
         end
         
         function outputArg = method1(obj,inputArg)
