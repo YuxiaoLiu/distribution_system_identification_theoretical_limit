@@ -27,7 +27,6 @@ classdef caseDistributionSystem
         isMeasure           % whether we have a specific measurement device
         
         bound               % the bound of different parameters
-        bound1               % the bound with disturbance
         admittanceOnly      % only calculate the G and B bound
         k                   % the enlarge factor to maintain the numerical stability
         tol                 % the tolerance of the modified Cholesky decomposition
@@ -571,8 +570,7 @@ classdef caseDistributionSystem
             elseif nargin == 1
                 delta = 0.1;
             end
-%             FIM1 = (1+delta * randn(size(obj.FIM))) .* obj.FIM;
-            FIM1 = (1+delta) * obj.FIM;
+            FIM1 = (1+delta * randn(size(obj.FIM))) .* obj.FIM;
             var1 = diag(FIM1(obj.numFIM.index, obj.numFIM.index)\eye(sum(obj.numFIM.index)));
             if min(var1) < 0
                 var1 = abs(var1);
@@ -587,13 +585,13 @@ classdef caseDistributionSystem
             
             boundB = zeros(obj.numFIM.B, 1);
             boundB(obj.numFIM.index(1:obj.numFIM.G)) = ...
-                obj.bound1.total(obj.numFIM.G+1-obj.numFIM.del:obj.numFIM.G+obj.numFIM.B-2*obj.numFIM.del) / obj.k.B;
-            obj.bound1.total(obj.numFIM.G+1-obj.numFIM.del:obj.numFIM.G+obj.numFIM.B-2*obj.numFIM.del) = ...
-                obj.bound1.total(obj.numFIM.G+1-obj.numFIM.del:obj.numFIM.G+obj.numFIM.B-2*obj.numFIM.del) / obj.k.B;
-            obj.bound1.B = colToMat(obj, boundB, obj.numBus);
+                obj.bound.total(obj.numFIM.G+1-obj.numFIM.del:obj.numFIM.G+obj.numFIM.B-2*obj.numFIM.del) / obj.k.B;
+            obj.bound.total(obj.numFIM.G+1-obj.numFIM.del:obj.numFIM.G+obj.numFIM.B-2*obj.numFIM.del) = ...
+                obj.bound.total(obj.numFIM.G+1-obj.numFIM.del:obj.numFIM.G+obj.numFIM.B-2*obj.numFIM.del) / obj.k.B;
+            obj.bound.B = colToMat(obj, boundB, obj.numBus);
             
-            obj.bound1.G_relative = abs(obj.bound1.G ./ repmat(diag(obj.data.G), 1, obj.numBus));
-            obj.bound1.B_relative = abs(obj.bound1.B ./ repmat(diag(obj.data.B), 1, obj.numBus));
+            obj.bound.G_relative = abs(obj.bound.G ./ repmat(diag(obj.data.G), 1, obj.numBus));
+            obj.bound.B_relative = abs(obj.bound.B ./ repmat(diag(obj.data.B), 1, obj.numBus));
         end
         
         function h = matToCol(~, H)
