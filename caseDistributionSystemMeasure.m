@@ -101,18 +101,18 @@ classdef caseDistributionSystemMeasure < caseDistributionSystem
             
             % G matrix
             H_G = zeros(obj.numBus, obj.numBus);
-            H_G(bus, :) = obj.dataE.Vm(bus) * obj.dataE.Vm' / obj.k.G;
+            H_G(bus, :) = obj.dataE.Vm(bus, snap) * obj.dataE.Vm(:, snap)' / obj.k.G;
             h_G = obj.matToCol(H_G);
             h(1:obj.numFIM.G) = h_G;
             
             % Vm
             % the first order term of other Vm
             H_Vm = zeros(obj.numBus, obj.numSnap);
-            h_Vm = obj.dataE.Vm(bus) * obj.dataE.G(:, bus) / obj.k.vm;
+            h_Vm = obj.dataE.Vm(bus, snap) * obj.dataE.G(:, bus) / obj.k.vm;
             % the second order term of Vm(bus)
-            h_Vm(bus) = 2*obj.dataE.Vm(bus) * obj.dataE.G(bus, bus) / obj.k.vm;
+            h_Vm(bus) = 2*obj.dataE.Vm(bus, snap) * obj.dataE.G(bus, bus) / obj.k.vm;
             % the first order term of Vm(bus)
-            fOrderVm = obj.dataE.Vm .* obj.dataE.G(:, bus) / obj.k.vm;
+            fOrderVm = obj.dataE.Vm(:, snap) .* obj.dataE.G(:, bus) / obj.k.vm;
             fOrderVm(bus) = 0;
             h_Vm(bus) = h_Vm(bus) + sum(fOrderVm);
             H_Vm(:, snap) = h_Vm;
@@ -123,8 +123,8 @@ classdef caseDistributionSystemMeasure < caseDistributionSystem
             
             % Va
             H_Va = zeros(obj.numBus, obj.numSnap);
-            h_Va = obj.dataE.Vm(bus) * obj.dataE.Vm .* (- obj.dataE.B(:, bus)) / obj.k.va;
-            h_Va(bus) = h_Va(bus)-sum(obj.dataE.Vm(bus) * obj.dataE.Vm .* (- obj.dataE.B(:, bus))) / obj.k.va;
+            h_Va = obj.dataE.Vm(bus, snap) * obj.dataE.Vm(:, snap) .* (- obj.dataE.B(:, bus)) / obj.k.va;
+            h_Va(bus) = h_Va(bus)-sum(obj.dataE.Vm(bus, snap) * obj.dataE.Vm(:, snap) .* (- obj.dataE.B(:, bus))) / obj.k.va;
             H_Va(:, snap) = h_Va;
             % remove the source bus whose magnitude is not the state variable
             H_Va(1, :) = []; 
@@ -144,18 +144,18 @@ classdef caseDistributionSystemMeasure < caseDistributionSystem
             
             % B matrix
             H_B = zeros(obj.numBus, obj.numBus);
-            H_B(bus, :) = - obj.dataE.Vm(bus) * obj.dataE.Vm' / obj.k.B;
+            H_B(bus, :) = - obj.dataE.Vm(bus, snap) * obj.dataE.Vm(:, snap)' / obj.k.B;
             h_B = obj.matToCol(H_B);
             h(obj.numFIM.G+1:obj.numFIM.G+obj.numFIM.B) = h_B;
             
             % Vm
             % the first order term of other Vm
             H_Vm = zeros(obj.numBus, obj.numSnap);
-            h_Vm = obj.dataE.Vm(bus) * (-obj.dataE.B(:, bus)) / obj.k.vm;
+            h_Vm = obj.dataE.Vm(bus, snap) * (-obj.dataE.B(:, bus)) / obj.k.vm;
             % the second order term of Vm(bus)
-            h_Vm(bus) = 2*obj.dataE.Vm(bus) * (-obj.dataE.B(bus, bus)) / obj.k.vm;
+            h_Vm(bus) = 2*obj.dataE.Vm(bus, snap) * (-obj.dataE.B(bus, bus)) / obj.k.vm;
             % the first order term of Vm(bus)
-            fOrderVm = obj.dataE.Vm .* (-obj.dataE.B(:, bus)) / obj.k.vm;
+            fOrderVm = obj.dataE.Vm(:, snap) .* (-obj.dataE.B(:, bus)) / obj.k.vm;
             fOrderVm(bus) = 0;
             h_Vm(bus) = h_Vm(bus) + sum(fOrderVm);
             H_Vm(:, snap) = h_Vm;
@@ -166,8 +166,8 @@ classdef caseDistributionSystemMeasure < caseDistributionSystem
             
             % Va
             H_Va = zeros(obj.numBus, obj.numSnap);
-            h_Va = - obj.dataE.Vm(bus) * obj.dataE.Vm .* obj.dataE.G(:, bus) / obj.k.va;
-            h_Va(bus) = h_Va(bus)+sum(obj.dataE.Vm(bus) * obj.dataE.Vm .* obj.dataE.G(:, bus)) / obj.k.va;
+            h_Va = - obj.dataE.Vm(bus, snap) * obj.dataE.Vm(:, snap) .* obj.dataE.G(:, bus) / obj.k.va;
+            h_Va(bus) = h_Va(bus)+sum(obj.dataE.Vm(bus, snap) * obj.dataE.Vm(:, snap) .* obj.dataE.G(:, bus)) / obj.k.va;
             H_Va(:, snap) = h_Va;
             % remove the source bus whose magnitude is not the state variable
             H_Va(1, :) = []; 
