@@ -297,7 +297,7 @@ classdef caseDistributionSystem < handle
             assert (sum(abs(deltaQ)) <= 1e-6 );
             
             % G matrix
-            H_G = sparse(obj.numBus, obj.numBus);
+            H_G = zeros(obj.numBus, obj.numBus);
             H_G(bus, :) = obj.data.Vm(bus, snap) * obj.data.Vm(:, snap)' .* cos(theta_ij') / obj.k.G;
             h_G = obj.matToCol(H_G);
             assert (length(h_G) == obj.numFIM.G);
@@ -491,6 +491,7 @@ classdef caseDistributionSystem < handle
 %                 tol = tol * 1.5;
 %             end
             obj.bound.total = sqrt(var);
+            
             boundG = zeros(obj.numFIM.G, 1);
             boundG(obj.numFIM.index(1:obj.numFIM.G)) = obj.bound.total(1:obj.numFIM.G-obj.numFIM.del) / obj.k.G;
             obj.bound.total(1:obj.numFIM.G-obj.numFIM.del) = obj.bound.total(1:obj.numFIM.G-obj.numFIM.del) / obj.k.G;

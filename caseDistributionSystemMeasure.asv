@@ -25,7 +25,7 @@ classdef caseDistributionSystemMeasure < caseDistributionSystem
             % The first version is extremely simple
             
             % we first evaluate the vm
-            obj.dataE.Vm = obj.data.Vm_noised;
+            obj.dataE.Vm = mean(obj.data.Vm_noised, 2);
             
             % We then evaluate the G and B. 
             obj.dataE.G = obj.data.G;
@@ -219,34 +219,9 @@ classdef caseDistributionSystemMeasure < caseDistributionSystem
             obj.boundA.total = sqrt(var);
             
             boundG = zeros(obj.numFIM.G, 1);
-            boundG(obj.numFIM.index(1:obj.numFIM.G)) = obj.boundA.total(1:obj.numFIM.G-obj.numFIM.del) / obj.k.G;
-            obj.boundA.total(1:obj.numFIM.G-obj.numFIM.del) = obj.boundA.total(1:obj.numFIM.G-obj.numFIM.del) / obj.k.G;
-            obj.boundA.G = obj.colToMat(boundG, obj.numBus);
-            
-            boundB = zeros(obj.numFIM.B, 1);
-            boundB(obj.numFIM.index(1:obj.numFIM.G)) = ...
-                obj.boundA.total(obj.numFIM.G+1-obj.numFIM.del:obj.numFIM.G+obj.numFIM.B-2*obj.numFIM.del) / obj.k.B;
-            obj.boundA.total(obj.numFIM.G+1-obj.numFIM.del:obj.numFIM.G+obj.numFIM.B-2*obj.numFIM.del) = ...
-                obj.boundA.total(obj.numFIM.G+1-obj.numFIM.del:obj.numFIM.G+obj.numFIM.B-2*obj.numFIM.del) / obj.k.B;
-            obj.boundA.B = obj.colToMat(boundB, obj.numBus);
-            
-            obj.boundA.G_relative = abs(obj.boundA.G ./ repmat(diag(obj.data.G), 1, obj.numBus));
-            obj.boundA.B_relative = abs(obj.boundA.B ./ repmat(diag(obj.data.B), 1, obj.numBus));
-            
-            if ~obj.admittanceOnly
-                obj.boundA.Vm = ...
-                    obj.boundA.total(obj.numFIM.G+obj.numFIM.B+1-2*obj.numFIM.del...
-                    :obj.numFIM.G+obj.numFIM.B+obj.numFIM.Vm-2*obj.numFIM.del) / obj.k.vm;
-                obj.boundA.total(obj.numFIM.G+obj.numFIM.B+1-2*obj.numFIM.del...
-                    :obj.numFIM.G+obj.numFIM.B+obj.numFIM.Vm-2*obj.numFIM.del)...
-                    = obj.boundA.Vm;
-                obj.boundA.Va = ...
-                    obj.boundA.total(obj.numFIM.G+obj.numFIM.B+obj.numFIM.Vm+1-2*obj.numFIM.del...
-                    :obj.numFIM.Sum-2*obj.numFIM.del) / obj.k.va;
-                obj.boundA.total(obj.numFIM.G+obj.numFIM.B+obj.numFIM.Vm+1-2*obj.numFIM.del...
-                    :obj.numFIM.Sum-2*obj.numFIM.del)...
-                    = obj.boundA.Va;
-            end
+            boundG(obj.numFIM.index(1:obj.numFIM.G)) = obj.bound.total(1:obj.numFIM.G-obj.numFIM.del) / obj.k.G;
+            obj.boundA.total(1:obj.numFIM.G-obj.numFIM.del) = obj.bound.total(1:obj.numFIM.G-obj.numFIM.del) / obj.k.G;
+            obj.bound.G = obj.colToMat(boundG, obj.numBus);
         end
     end
 end

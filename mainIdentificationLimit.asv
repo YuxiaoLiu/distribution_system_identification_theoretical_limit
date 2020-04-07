@@ -50,7 +50,6 @@ caseDS = caseDS.genOperateData;
 caseDS = caseDS.setAccuracy(ratio);
 caseDS = caseDS.preEvaluation;
 caseDS = caseDS.approximateFIM(k);
-caseDS = caseDS.calABound;
 caseDS = caseDS.buildFIM(k);
 caseDS = caseDS.updateTopo(topoTol, admittanceOnly);
 profile off;
