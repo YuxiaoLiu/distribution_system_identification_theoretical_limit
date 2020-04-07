@@ -3,7 +3,7 @@ classdef caseDistributionSystemMeasure < caseDistributionSystem
     % evaluations are conducted under practical measurements
     
     properties
-        Property1
+        dataE               % the estimated data
     end
     
     methods
@@ -12,10 +12,20 @@ classdef caseDistributionSystemMeasure < caseDistributionSystem
             obj = obj@caseDistributionSystem(caseName, numSnap, range);
         end
         
-        function outputArg = method1(obj,inputArg)
-            %METHOD1 此处显示有关此方法的摘要
-            %   此处显示详细说明
-            outputArg = obj.Property1 + inputArg;
+        function obj = preEvaluation(obj)
+            % This method evaluate the parameters before approximating the
+            % FIM. The evaluated value has low accuracy. We only use one
+            % snapshot for the Vm and Va.
+            
+            % The first version is extremely simple
+            
+            % we first evaluate the vm
+            obj.dataE.Vm = mean(obj.data.Vm_noised, 2);
+            
+            % We then evaluate the G and B. 
+            obj.dataE.G = obj.data.G;
+            
+            obj.dataE.B = obj.data.B;
         end
     end
 end

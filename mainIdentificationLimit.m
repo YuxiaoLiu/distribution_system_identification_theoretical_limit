@@ -48,6 +48,7 @@ caseDS = caseDS.genOperateData;
 % set the accuracy of the measurement device, and set whether we have the
 % measurement device of a certain state
 caseDS = caseDS.setAccuracy(ratio);
+caseDS = caseDS.preEvaluation;
 caseDS = caseDS.buildFIM(k);
 caseDS = caseDS.updateTopo(topoTol, admittanceOnly);
 profile off;
