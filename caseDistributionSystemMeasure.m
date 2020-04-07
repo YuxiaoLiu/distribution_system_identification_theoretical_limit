@@ -24,8 +24,9 @@ classdef caseDistributionSystemMeasure < caseDistributionSystem
             
             % The first version is extremely simple
             
-            % we first evaluate the vm
-            obj.dataE.Vm = obj.data.Vm_noised;
+            % we first evaluate the vm and the va
+            obj.dataE.Vm = obj.data.Vm;%_noised;
+            obj.dataE.Va = obj.data.Va;%_noised;
             
             % We then evaluate the G and B. 
             obj.dataE.G = obj.data.G;
@@ -98,21 +99,33 @@ classdef caseDistributionSystemMeasure < caseDistributionSystem
             % This method approximate the P part of FIM. We ignore the sin
             % part of the power flow equations.
             h = sparse(obj.numFIM.Sum, 1);
+%             theta_ij = obj.dataE.Va(bus, snap) - obj.dataE.Va(:, snap);
+%             Theta_ij = repmat(obj.dataE.Va(:, snap), 1, obj.numBus) - repmat(obj.dataE.Va(:, snap)', obj.numBus, 1);
+%             % G_ij\cos(\Theta_ij)+B_ij\sin(\Theta_ij)
+%             GBThetaP = obj.dataE.G .* cos(Theta_ij) + obj.dataE.B .* sin(Theta_ij);
+%             % G_ij\sin(\Theta_ij)-B_ij\cos(\Theta_ij)
+%             GBThetaQ = obj.dataE.G .* sin(Theta_ij) - obj.dataE.B .* cos(Theta_ij);
             
             % G matrix
             H_G = zeros(obj.numBus, obj.numBus);
-            H_G(bus, :) = obj.dataE.Vm(bus, snap) * obj.dataE.Vm(:, snap)' / obj.k.G;
+            H_G(bus, :) = obj.dataE.Vm(bus, snap) * obj.dataE.Vm(:, snap)' / obj.k.G; % .* cos(theta_ij')
             h_G = obj.matToCol(H_G);
             h(1:obj.numFIM.G) = h_G;
+            
+%             % B matrix
+%             H_B = zeros(obj.numBus, obj.numBus);
+%             H_B(bus, :) = obj.dataE.Vm(bus, snap) * obj.dataE.Vm(:, snap)' .* sin(theta_ij') / obj.k.B;
+%             h_B = obj.matToCol(H_B);
+%             h(obj.numFIM.G+1:obj.numFIM.G+obj.numFIM.B) = h_B;
             
             % Vm
             % the first order term of other Vm
             H_Vm = zeros(obj.numBus, obj.numSnap);
-            h_Vm = obj.dataE.Vm(bus, snap) * obj.dataE.G(:, bus) / obj.k.vm;
+            h_Vm = obj.dataE.Vm(bus, snap) * obj.dataE.G(:, bus) / obj.k.vm; % obj.dataE.G(:, bus)
             % the second order term of Vm(bus)
-            h_Vm(bus) = 2*obj.dataE.Vm(bus, snap) * obj.dataE.G(bus, bus) / obj.k.vm;
+            h_Vm(bus) = 2*obj.dataE.Vm(bus, snap) * obj.dataE.G(bus, bus) / obj.k.vm; % obj.dataE.G(bus, bus)
             % the first order term of Vm(bus)
-            fOrderVm = obj.dataE.Vm(:, snap) .* obj.dataE.G(:, bus) / obj.k.vm;
+            fOrderVm = obj.dataE.Vm(:, snap) .* obj.dataE.G(:, bus) / obj.k.vm; % obj.dataE.G(:, bus)
             fOrderVm(bus) = 0;
             h_Vm(bus) = h_Vm(bus) + sum(fOrderVm);
             H_Vm(:, snap) = h_Vm;
@@ -123,8 +136,8 @@ classdef caseDistributionSystemMeasure < caseDistributionSystem
             
             % Va
             H_Va = zeros(obj.numBus, obj.numSnap);
-            h_Va = obj.dataE.Vm(bus, snap) * obj.dataE.Vm(:, snap) .* (- obj.dataE.B(:, bus)) / obj.k.va;
-            h_Va(bus) = h_Va(bus)-sum(obj.dataE.Vm(bus, snap) * obj.dataE.Vm(:, snap) .* (- obj.dataE.B(:, bus))) / obj.k.va;
+            h_Va = obj.dataE.Vm(bus, snap) * obj.dataE.Vm(:, snap) .* (- obj.dataE.B(:, bus)) / obj.k.va; % (- obj.dataE.B(:, bus))
+            h_Va(bus) = h_Va(bus)-sum(obj.dataE.Vm(bus, snap) * obj.dataE.Vm(:, snap) .* (- obj.dataE.B(:, bus))) / obj.k.va; % (- obj.dataE.B(:, bus)))
             H_Va(:, snap) = h_Va;
             % remove the source bus whose magnitude is not the state variable
             H_Va(1, :) = []; 
@@ -141,21 +154,33 @@ classdef caseDistributionSystemMeasure < caseDistributionSystem
             % This method approximate the Q part of FIM. We ignore the sin
             % part of the power flow equations.
             h = sparse(obj.numFIM.Sum, 1);
+            theta_ij = obj.dataE.Va(bus, snap) - obj.dataE.Va(:, snap);
+%             Theta_ij = repmat(obj.dataE.Va(:, snap), 1, obj.numBus) - repmat(obj.dataE.Va(:, snap)', obj.numBus, 1);
+%             % G_ij\cos(\Theta_ij)+B_ij\sin(\Theta_ij)
+%             GBThetaP = obj.dataE.G .* cos(Theta_ij) + obj.dataE.B .* sin(Theta_ij);
+%             % G_ij\sin(\Theta_ij)-B_ij\cos(\Theta_ij)
+%             GBThetaQ = obj.dataE.G .* sin(Theta_ij) - obj.dataE.B .* cos(Theta_ij);
+            
+%             % G matrix
+%             H_G = zeros(obj.numBus, obj.numBus);
+%             H_G(bus, :) = obj.dataE.Vm(bus, snap) * obj.dataE.Vm(:, snap)' .* sin(theta_ij') / obj.k.G;
+%             h_G = obj.matToCol(H_G);
+%             h(1:obj.numFIM.G) = h_G;
             
             % B matrix
             H_B = zeros(obj.numBus, obj.numBus);
-            H_B(bus, :) = - obj.dataE.Vm(bus, snap) * obj.dataE.Vm(:, snap)' / obj.k.B;
+            H_B(bus, :) = - obj.dataE.Vm(bus, snap) * obj.dataE.Vm(:, snap)' / obj.k.B; %  .* cos(theta_ij')
             h_B = obj.matToCol(H_B);
             h(obj.numFIM.G+1:obj.numFIM.G+obj.numFIM.B) = h_B;
             
             % Vm
             % the first order term of other Vm
             H_Vm = zeros(obj.numBus, obj.numSnap);
-            h_Vm = obj.dataE.Vm(bus, snap) * (-obj.dataE.B(:, bus)) / obj.k.vm;
+            h_Vm = obj.dataE.Vm(bus, snap) * (-obj.dataE.B(:, bus)) / obj.k.vm; % (-obj.dataE.B(:, bus))
             % the second order term of Vm(bus)
-            h_Vm(bus) = 2*obj.dataE.Vm(bus, snap) * (-obj.dataE.B(bus, bus)) / obj.k.vm;
+            h_Vm(bus) = 2*obj.dataE.Vm(bus, snap) * (-obj.dataE.B(bus, bus)) / obj.k.vm; % (-obj.dataE.B(bus, bus))
             % the first order term of Vm(bus)
-            fOrderVm = obj.dataE.Vm(:, snap) .* (-obj.dataE.B(:, bus)) / obj.k.vm;
+            fOrderVm = obj.dataE.Vm(:, snap) .* (-obj.dataE.B(:, bus)) / obj.k.vm; % (-obj.dataE.B(:, bus))
             fOrderVm(bus) = 0;
             h_Vm(bus) = h_Vm(bus) + sum(fOrderVm);
             H_Vm(:, snap) = h_Vm;
@@ -166,8 +191,8 @@ classdef caseDistributionSystemMeasure < caseDistributionSystem
             
             % Va
             H_Va = zeros(obj.numBus, obj.numSnap);
-            h_Va = - obj.dataE.Vm(bus, snap) * obj.dataE.Vm(:, snap) .* obj.dataE.G(:, bus) / obj.k.va;
-            h_Va(bus) = h_Va(bus)+sum(obj.dataE.Vm(bus, snap) * obj.dataE.Vm(:, snap) .* obj.dataE.G(:, bus)) / obj.k.va;
+            h_Va = - obj.dataE.Vm(bus, snap) * obj.dataE.Vm(:, snap) .* obj.dataE.G(:, bus) / obj.k.va; % obj.dataE.G(:, bus)
+            h_Va(bus) = h_Va(bus)+sum(obj.dataE.Vm(bus, snap) * obj.dataE.Vm(:, snap) .* obj.dataE.G(:, bus)) / obj.k.va; % obj.dataE.G(:, bus))
             H_Va(:, snap) = h_Va;
             % remove the source bus whose magnitude is not the state variable
             H_Va(1, :) = []; 
