@@ -5,6 +5,7 @@ classdef caseDistributionSystemMeasure < caseDistributionSystem
     properties
         dataE               % the estimated data
         boundA              % the approximated bound
+        sigmaReal           % the deviation of the real state variables
         
         A_FIM               % the approximated fisher information matrix
         A_FIMP              % the (sparse) FIM of active power injection
@@ -25,8 +26,13 @@ classdef caseDistributionSystemMeasure < caseDistributionSystem
             % The first version is extremely simple
             
             % we first evaluate the vm and the va
-            obj.dataE.Vm = obj.data.Vm;%_noised;
-            obj.dataE.Va = obj.data.Va;%_noised;
+%             obj.dataE.Vm = obj.data.Vm;%_noised;
+%             obj.dataE.Va = obj.data.Va;%_noised;
+            obj.sigmaReal.Vm = cov(obj.data.Vm');
+            mu = mean(obj.data.Vm, 2);
+            rng(5);
+            obj.dataE.Vm = mvnrnd(mu, obj.sigmaReal.Vm, obj.numSnap)';
+%             obj.dataE.Vm = obj.data.Vm;%_noised;
             
             % We then evaluate the G and B. 
             obj.dataE.G = obj.data.G;
@@ -154,7 +160,7 @@ classdef caseDistributionSystemMeasure < caseDistributionSystem
             % This method approximate the Q part of FIM. We ignore the sin
             % part of the power flow equations.
             h = sparse(obj.numFIM.Sum, 1);
-            theta_ij = obj.dataE.Va(bus, snap) - obj.dataE.Va(:, snap);
+%             theta_ij = obj.dataE.Va(bus, snap) - obj.dataE.Va(:, snap);
 %             Theta_ij = repmat(obj.dataE.Va(:, snap), 1, obj.numBus) - repmat(obj.dataE.Va(:, snap)', obj.numBus, 1);
 %             % G_ij\cos(\Theta_ij)+B_ij\sin(\Theta_ij)
 %             GBThetaP = obj.dataE.G .* cos(Theta_ij) + obj.dataE.B .* sin(Theta_ij);
