@@ -28,7 +28,7 @@ classdef caseDistributionSystemMeasure < caseDistributionSystem
             % we first evaluate the vm and the va
 %             obj.dataE.Vm = obj.data.Vm;%_noised;
 %             obj.dataE.Va = obj.data.Va;%_noised;
-            obj.sigmaReal.Vm = cov(obj.data.Vm');
+            obj.sigmaReal.Vm = cov(obj.data.Vm') * 2;
             mu = mean(obj.data.Vm, 2);
             rng(5);
             obj.dataE.Vm = mvnrnd(mu, obj.sigmaReal.Vm, obj.numSnap)';
@@ -37,6 +37,8 @@ classdef caseDistributionSystemMeasure < caseDistributionSystem
             % We then evaluate the G and B. 
             obj.dataE.G = obj.data.G;
             obj.dataE.B = obj.data.B;
+            
+            obj = approximateY(obj);
         end
         
         function obj = approximateFIM(obj, varargin)
@@ -241,6 +243,13 @@ classdef caseDistributionSystemMeasure < caseDistributionSystem
                 var = diag(obj.A_FIM(obj.numFIM.index, obj.numFIM.index)\eye(sum(obj.numFIM.index)));
             else
                 var = diag(obj.A_FIM(obj.numFIM.index, obj.numFIM.index)\eye(sum(obj.numFIM.index)));
+%                 % we construct a Hermitian matrix H and use Cholesky
+%                 % decomposition to compute the inverse matrix
+%                 FIM = obj.A_FIM(obj.numFIM.index, obj.numFIM.index);
+%                 H = FIM * FIM';
+%                 U = chol(H);
+%                 Uinv = U \ eye(size(U));
+%                 Cov = H' * (Uinv * Uinv');
             end
             if min(var) < 0
                 var = abs(var);
@@ -278,6 +287,14 @@ classdef caseDistributionSystemMeasure < caseDistributionSystem
                     :obj.numFIM.Sum-2*obj.numFIM.del)...
                     = obj.boundA.Va;
             end
+        end
+        
+        function obj = approximateY(obj)
+            % This method approximate the Y matrix by the measurements
+            randG = 0.5 + 0.5 * randn(size(obj.data.G));
+            randB = 0.5 + 0.5 * randn(size(obj.data.B));
+            obj.dataE.G = obj.data.G .* randG;
+            obj.dataE.B = obj.data.B .* randB;
         end
     end
 end

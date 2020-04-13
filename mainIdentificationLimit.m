@@ -27,10 +27,10 @@ topoTol = 0.05;
 % the enlarge factor to maintain the numerical stability
 switch caseName
     case 'case33bw'
-        k.G = 5;%1000;
-        k.B = 10;%5000;
-        k.vm = 100;%100000;
-        k.va = 1000;%1000000;
+        k.G = 1;%50;%5;%1000;
+        k.B = 1;%100;%10;%5000;
+        k.vm =1;%1000;%100;%100000;
+        k.va = 1;%10000;%1000;%1000000;
     otherwise
         k.G = 1;
         k.B = 1;
