@@ -6,14 +6,14 @@ clear;clc;
 warning off
 caseName = 'case33bw';     % the case name    'case3_dist' 'case33bw'
 numSnap = 120;             % the number of snapshot
-range.P = 0.6;             % the deviation range of active load 0.6
-range.Q = 0.2;             % the deviation range of reactive load to active load 0.2
+range.P = 1.2;               % the deviation range of active load 0.6
+range.Q = 0.3;             % the deviation range of reactive load to active load 0.2
 
 % the accuracy of measurement device
-ratio.P = 0.005;%0.005
-ratio.Q = 0.005;
-ratio.Vm = 0.005;%0.0000005;--the maximum error
-ratio.Va = 0.005;%0.000005
+ratio.P = 0.001;%0.005
+ratio.Q = 0.001;
+ratio.Vm = 0.001;%0.0000005;--the maximum error
+ratio.Va = 0.001;%0.000005
 
 % if we only compute the bound of admittance matrix
 admittanceOnly = false;
@@ -27,15 +27,19 @@ topoTol = 0.05;
 % the enlarge factor to maintain the numerical stability
 switch caseName
     case 'case33bw'
-        k.G = 1;%50;%5;%1000;
-        k.B = 1;%100;%10;%5000;
-        k.vm =1;%1000;%100;%100000;
-        k.va = 1;%10000;%1000;%1000000;
+        k.G = 50;%5;%1000;
+        k.B = 100;%10;%5000;
+        k.vm = 1000;%100;%100000;
+        k.va = 10000;%1000;%1000000;
+        ratio.Pmin = 0.05; % the minimum P measurement noise compared with the source bus
+        ratio.Qmin = 0.05;
     otherwise
         k.G = 1;
         k.B = 1;
         k.vm = 1;
         k.va = 1;
+        ratio.Pmin = 0.01; % the minimum P measurement noise compared with the source bus
+        ratio.Qmin = 0.01;
 end
 
 profile on;

@@ -104,7 +104,7 @@ classdef caseDistributionSystem < handle
             load(:,obj.numSnap+1:end) = [];
             
             % rescale the data
-            load = 1 - obj.range.P/2 + load*obj.range.P;
+            load = 1 - obj.range.P/3 + load*obj.range.P; % 2
             obj.loadP = load;
             
             % generate the reactive load data
@@ -182,6 +182,8 @@ classdef caseDistributionSystem < handle
             % enlarge ratio of each rows of measurement noise.
             obj.sigma.P = max(abs(obj.data.P),[], 2) * ratio.P; %  mean(abs(obj.data.P), 2) * ratio.P;
             obj.sigma.Q = max(abs(obj.data.Q),[], 2) * ratio.Q; % mean
+            obj.sigma.P = max(obj.sigma.P, ratio.Pmin * obj.sigma.P(1));
+            obj.sigma.Q = max(obj.sigma.Q, ratio.Qmin * obj.sigma.Q(1));
             obj.sigma.Vm = mean(abs(obj.data.Vm), 2) * ratio.Vm;
             obj.sigma.Va = ones(obj.numBus, 1) * pi / 1800  * ratio.Va;
 %             obj.sigma.Va = mean(abs(obj.data.Va), 2) * ratio.Va;
