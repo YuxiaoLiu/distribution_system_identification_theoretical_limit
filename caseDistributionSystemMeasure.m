@@ -311,6 +311,8 @@ classdef caseDistributionSystemMeasure < caseDistributionSystem
             [~, VmOrder] = sort(VmMean,'descend');
             
             assert (VmOrder(1) == 1); % the first bus is the source bus
+            
+            Vm = movmean(Vm, floor(obj.numSnap/20), 2);
             corr = corrcoef(Vm');
             corr(isnan(corr)) = 0; % one can also simulate some disturbance in the source bus voltage
             for i = 2:obj.numBus
@@ -320,6 +322,7 @@ classdef caseDistributionSystemMeasure < caseDistributionSystem
                 Topo(VmOrder(loc), VmOrder(i)) = true;
             end
 
+            % approximate the parameter
             IP = obj.data.IP_noised;
             IQ = obj.data.IQ_noised;
 %             G = IP * obj.data.Vm_noised' / (obj.data.Vm_noised * obj.data.Vm_noised');
@@ -327,15 +330,14 @@ classdef caseDistributionSystemMeasure < caseDistributionSystem
             G_ols = zeros(obj.numBus, obj.numBus);
             B_ols = zeros(obj.numBus, obj.numBus);
             for i = 1:obj.numBus
-                filter = true(obj.numBus, 1);
-                filter(i) = false;
-                VmDelta = obj.data.Vm_noised(filter, :) - repmat(obj.data.Vm_noised(i, :), obj.numBus-1, 1);
-%                 giTls = obj.tls(VmDelta', IP(i, :)');
-%                 IP_tls = giTls' * VmDelta;
-%                 giLasso = lasso(VmDelta', IP(i, :)');
-%                 IP_lasso = giLasso(:,70)' * VmDelta;
-                G_ols(i, filter) = IP(i, :) * VmDelta' / (VmDelta * VmDelta');
-                B_ols(i, filter) = - IQ(i, :) * VmDelta' / (VmDelta * VmDelta');
+                j = VmOrder(i);
+                filter = Topo(:, j);
+                filter(j) = false;
+                VmDelta = Vm(filter, :) - repmat(Vm(j, :), sum(filter), 1);
+                G_ols(j, filter) = IP(i, :) * VmDelta' / (VmDelta * VmDelta');
+                G_ols(j, j) = -sum(G_ols(j, filter));
+                B_ols(j, filter) = - IQ(j, :) * VmDelta' / (VmDelta * VmDelta');
+                B_ols(j, j) = -sum(B_ols(j, filter));
             end
             G_ols = (G_ols + G_ols') / 2;
             B_ols = (B_ols + B_ols') / 2;
