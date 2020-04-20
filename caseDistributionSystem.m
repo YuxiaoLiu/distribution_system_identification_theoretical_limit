@@ -142,11 +142,16 @@ classdef caseDistributionSystem < handle
             % assert that all the power flow converge
             assert(isempty(find(isSuccess == 0, 1)));
             
+            % calculate the active and reactive current injection
+            data_.IP = data_.P ./ data_.Vm;
+            data_.IQ = data_.Q ./ data_.Vm;
+            
             % generate the G and B matrix
             Y = makeYbus(obj.mpc);
             data_.G = real(full(Y));
             data_.B = imag(full(Y));
             data_.GBzero = data_.G == 0;
+            
             obj.data = data_;
         end
         
@@ -209,6 +214,14 @@ classdef caseDistributionSystem < handle
             obj.data.Q_noised = obj.data.Q + obj.data.Q_noise;
             obj.data.Vm_noised = obj.data.Vm + obj.data.Vm_noise;
             obj.data.Va_noised = obj.data.Va + obj.data.Va_noise;
+            
+            % we calculate the noise of current injections
+            obj.data.IP_noised = obj.data.P_noised ./ obj.data.Vm_noised;
+            obj.data.IQ_noised = obj.data.Q_noised ./ obj.data.Vm_noised;
+            obj.data.IP_noise = obj.data.IP_noised - obj.data.IP;
+            obj.data.IQ_noise = obj.data.IQ_noised - obj.data.IQ;
+            obj.sigma.IP = std(obj.data.IP_noise, 0, 2);
+            obj.sigma.IQ = std(obj.data.IQ_noise, 0, 2);
         end
         
         function obj = buildFIM(obj, varargin)

@@ -35,8 +35,8 @@ classdef caseDistributionSystemMeasure < caseDistributionSystem
 %             obj.dataE.Vm = obj.data.Vm;%_noised;
             
             % We then evaluate the G and B. 
-            obj.dataE.G = obj.data.G;
-            obj.dataE.B = obj.data.B;
+%             obj.dataE.G = obj.data.G;
+%             obj.dataE.B = obj.data.B;
             
             obj = approximateY(obj);
         end
@@ -290,12 +290,57 @@ classdef caseDistributionSystemMeasure < caseDistributionSystem
         end
         
         function obj = approximateY(obj)
-            % This method approximate the Y matrix by the measurements
+            % This method approximate the Y matrix by the measurements. We
+            % use the simple Ohom's law to provide an initial value of Y.
+            % We also assume the G/B ratio is a constant.
             randG = 0.5 + 0.5 * randn(size(obj.data.G));
             randB = 0.5 + 0.5 * randn(size(obj.data.B));
             obj.dataE.G = obj.data.G .* randG;
             obj.dataE.B = obj.data.B .* randB;
+
+%             IP = obj.data.IP_noised;
+%             IQ = obj.data.IQ_noised;
+%             G = IP * obj.data.Vm_noised' / (obj.data.Vm_noised * obj.data.Vm_noised');
+%             B = - IQ * obj.data.Vm_noised' / (obj.data.Vm_noised * obj.data.Vm_noised');
+            
+%             for i = 1:obj.numBus
+%                 filter = true(obj.numBus, 1);
+%                 filter(i) = false;
+%                 VmDelta = obj.data.Vm_noised(filter, :) - repmat(obj.data.Vm_noised(i, :), obj.numBus-1, 1);
+%                 giTls = obj.tls(VmDelta', IP(i, :)');
+%                 IP_tls = giTls' * VmDelta;
+%                 giLasso = lasso(VmDelta', IP(i, :)');
+%                 IP_lasso = giLasso(:,70)' * VmDelta;
+%             end
+            
+%             G = lasso(obj.data.Vm_noised', IP(1,:)');
+
+%             obj.dataE.G = (G + G') / 2;
+%             obj.dataE.B = (B + B') / 2;
         end
+    end
+    
+    methods (Static)
+        function B = tls(xdata,ydata)
+            % This method con
+            SUM = sum(xdata,1);
+            zero = find(SUM==0);
+            xdata(:,zero)=[];
+
+%             m       = length(ydata);       %number of x,y data pairs
+            X       = xdata;
+            Y       = ydata;
+            n       = size(X,2);          % n is the width of X (X is m by n)
+            Z       = [X Y];              % Z is X augmented with Y.
+            [~, ~, V] = svd(Z,0);         % find the SVD of Z.
+            VXY     = V(1:n,1+n:end);     % Take the block of V consisting of the first n rows and the n+1 to last column
+            VYY     = V(1+n:end,1+n:end); % Take the bottom-right block of V.
+            B       = -VXY/VYY;
+
+            for i = zero
+                B = [B(1:i-1); 0; B(i:end)];
+            end
+            end
     end
 end
 
