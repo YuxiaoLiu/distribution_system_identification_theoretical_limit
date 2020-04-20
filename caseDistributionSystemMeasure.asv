@@ -306,7 +306,7 @@ classdef caseDistributionSystemMeasure < caseDistributionSystem
             % approximate the topology using Vm data only
             % ranking the Vm
             Vm = obj.data.Vm_noised;
-            Topo = logical(eye(obj.numBus));
+            Topo = eye(obj.numBus);
             VmMean = mean(Vm, 2);
             [~, VmOrder] = sort(VmMean,'descend');
             
@@ -315,9 +315,7 @@ classdef caseDistributionSystemMeasure < caseDistributionSystem
             corr(isnan(corr)) = 0; % one can also simulate some disturbance in the source bus voltage
             for i = 2:obj.numBus
                 % iterate each bus
-                [~, loc] = max(corr(VmOrder(i), VmOrder(1:i-1))); % the location of the connected bus
-                Topo(VmOrder(i), VmOrder(loc)) = true;
-                Topo(VmOrder(loc), VmOrder(i)) = true;
+                [~, ] = max(corr(VmOrder(i), VmOrder(1:i-1)));
             end
 
             IP = obj.data.IP_noised;
