@@ -521,6 +521,8 @@ classdef caseDistributionSystem < handle
             
             obj.bound.G_relative = abs(obj.bound.G ./ repmat(diag(obj.data.G), 1, obj.numBus));
             obj.bound.B_relative = abs(obj.bound.B ./ repmat(diag(obj.data.B), 1, obj.numBus));
+            obj.bound.G_relative_col = reshape(obj.bound.G_relative, [], 1);
+            obj.bound.B_relative_col = reshape(obj.bound.B_relative, [], 1);
             
             if ~obj.admittanceOnly
                 obj.bound.Vm = ...

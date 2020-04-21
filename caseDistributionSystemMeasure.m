@@ -272,6 +272,8 @@ classdef caseDistributionSystemMeasure < caseDistributionSystem
             
             obj.boundA.G_relative = abs(obj.boundA.G ./ repmat(diag(obj.data.G), 1, obj.numBus));
             obj.boundA.B_relative = abs(obj.boundA.B ./ repmat(diag(obj.data.B), 1, obj.numBus));
+            obj.boundA.G_relative_col = reshape(obj.boundA.G_relative, [], 1);
+            obj.boundA.B_relative_col = reshape(obj.boundA.B_relative, [], 1);
             
             if ~obj.admittanceOnly
                 obj.boundA.Vm = ...
@@ -300,8 +302,8 @@ classdef caseDistributionSystemMeasure < caseDistributionSystem
             obj.dataE.G = obj.data.G .* randG;
             obj.dataE.B = obj.data.B .* randB;
             % The approximation of the diagonal elements
-            diagG = sum(obj.dataE.G);
-            diagB = sum(obj.dataE.B);
+%             diagG = sum(obj.dataE.G);
+%             diagB = sum(obj.dataE.B);
             
             % approximate the topology using Vm data only
             % ranking the Vm
@@ -321,6 +323,8 @@ classdef caseDistributionSystemMeasure < caseDistributionSystem
                 Topo(VmOrder(i), VmOrder(loc)) = true;
                 Topo(VmOrder(loc), VmOrder(i)) = true;
             end
+            
+%             Topo = obj.data.G~=0;
 
             % approximate the parameter
             IP = obj.data.IP_noised;
@@ -333,19 +337,34 @@ classdef caseDistributionSystemMeasure < caseDistributionSystem
                 j = VmOrder(i);
                 filter = Topo(:, j);
                 filter(j) = false;
+                previous = VmOrder(1:i);
+                previous = intersect(previous, find(filter));
+                
                 VmDelta = Vm(filter, :) - repmat(Vm(j, :), sum(filter), 1);
-                G_ols(j, filter) = IP(i, :) * VmDelta' / (VmDelta * VmDelta');
-                G_ols(j, j) = -sum(G_ols(j, filter));
-                B_ols(j, filter) = - IQ(j, :) * VmDelta' / (VmDelta * VmDelta');
-                B_ols(j, j) = -sum(B_ols(j, filter));
+                yG = IP(i, :);
+                yB = IQ(i, :);
+                try
+                    yG = yG - G_ols(previous, j) * VmDelta(previous, :);
+                    yB = yB + B_ols(previous, j) * VmDelta(previous, :);
+                catch
+                end
+                
+                filter(previous) = false;
+                VmDelta = Vm(filter, :) - repmat(Vm(j, :), sum(filter), 1);
+                G_ols(j, filter) = - abs(yG * VmDelta' / (VmDelta * VmDelta'));
+                G_ols(filter, j) = G_ols(j, filter);
+                G_ols(j, j) = -sum(G_ols(j, :));
+                B_ols(j, filter) = abs( - yB * VmDelta' / (VmDelta * VmDelta'));
+                B_ols(filter, j) = B_ols(j, filter);
+                B_ols(j, j) = -sum(B_ols(j, :));
             end
-            G_ols = (G_ols + G_ols') / 2;
-            B_ols = (B_ols + B_ols') / 2;
+%             G_ols = (G_ols + G_ols') / 2;
+%             B_ols = (B_ols + B_ols') / 2;
             
 %             G = lasso(obj.data.Vm_noised', IP(1,:)');
 
-%             obj.dataE.G = (G + G') / 2;
-%             obj.dataE.B = (B + B') / 2;
+            obj.dataE.G = G_ols;
+            obj.dataE.B = B_ols;
         end
     end
     

@@ -332,12 +332,22 @@ classdef caseDistributionSystemMeasure < caseDistributionSystem
             for i = 1:obj.numBus
                 j = VmOrder(i);
                 filter = Topo(:, j);
-                filter(i) = false;
-                VmDelta = Vm(filter, :) - repmat(Vm(i, :), sum(filter), 1);
-                G_ols(i, filter) = IP(i, :) * VmDelta' / (VmDelta * VmDelta');
-                G_ols(i, i) = -sum(G_ols(i, filter));
-                B_ols(i, filter) = - IQ(i, :) * VmDelta' / (VmDelta * VmDelta');
-                B_ols(i, i) = -sum(B_ols(i, filter));
+                previous = VmOrder(1:i);
+                previous = intersect(previous, filter);
+                filter(j) = false;
+                
+                VmDelta = Vm(filter, :) - repmat(Vm(j, :), sum(filter), 1);
+                y = IP(i, :);
+                y = y - G_ols(previous, j) * VmDelta(previous, :);
+                
+                filter(previous) = false;
+                VmDelta = Vm(filter, :) - repmat(Vm(j, :), sum(filter), 1);
+                G_ols(j, filter) = y * VmDelta' / (VmDelta * VmDelta');
+                G_ols(filter, j) = G_ols(j, filter);
+                G_ols(j, j) = -sum(G_ols(j, filter));
+                B_ols(j, filter) = - IQ(j, :) * VmDelta' / (VmDelta * VmDelta');
+                B_ols(filter, j) = B_ols(j, filter);
+                B_ols(j, j) = -sum(B_ols(j, filter));
             end
             G_ols = (G_ols + G_ols') / 2;
             B_ols = (B_ols + B_ols') / 2;
