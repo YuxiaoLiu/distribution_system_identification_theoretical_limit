@@ -6,6 +6,7 @@ classdef caseDistributionSystemMeasure < caseDistributionSystem
         dataE               % the estimated data
         boundA              % the approximated bound
         sigmaReal           % the deviation of the real state variables
+        prior               % the prior assumptions of the G and B matrix
         
         A_FIM               % the approximated fisher information matrix
         A_FIMP              % the (sparse) FIM of active power injection
@@ -18,12 +19,18 @@ classdef caseDistributionSystemMeasure < caseDistributionSystem
             obj = obj@caseDistributionSystem(caseName, numSnap, range);
         end
         
-        function obj = preEvaluation(obj)
+        function obj = preEvaluation(obj, varargin)
             % This method evaluate the parameters before approximating the
             % FIM. The evaluated value has low accuracy. We only use one
             % snapshot for the Vm and Va.
             
-            % The first version is extremely simple
+            if nargin == 2
+                obj.prior = varargin{1};
+            elseif nargin == 1
+                obj.prior.Gmin = 0.1;
+                obj.prior.Bmin = 0.1;
+                obj.prior.ratio = 0.05;
+            end
             
             % we first evaluate the vm and the va
 %             obj.dataE.Vm = obj.data.Vm;%_noised;
@@ -344,24 +351,27 @@ classdef caseDistributionSystemMeasure < caseDistributionSystem
                 yG = IP(i, :);
                 yB = IQ(i, :);
                 try
-                    yG = yG - G_ols(previous, j) * VmDelta(previous, :);
-                    yB = yB + B_ols(previous, j) * VmDelta(previous, :);
+                    yG = yG - G_ols(previous, j) * VmDelta(filter(previous), :);
+                    yB = yB + B_ols(previous, j) * VmDelta(filter(previous), :);
                 catch
+                    assert (i == 1);
                 end
                 
+                rng(i);
                 filter(previous) = false;
                 VmDelta = Vm(filter, :) - repmat(Vm(j, :), sum(filter), 1);
-                G_ols(j, filter) = - abs(yG * VmDelta' / (VmDelta * VmDelta'));
+                G_ols(j, filter) = yG * VmDelta' / (VmDelta * VmDelta');
+                outlier = G_ols(j,:) > -obj.prior.Gmin;
+                G_ols(j, filter & outlier') = - obj.prior.Gmin * (1+0.1*rand());
                 G_ols(filter, j) = G_ols(j, filter);
                 G_ols(j, j) = -sum(G_ols(j, :));
-                B_ols(j, filter) = abs( - yB * VmDelta' / (VmDelta * VmDelta'));
+                
+                B_ols(j, filter) = - yB * VmDelta' / (VmDelta * VmDelta');
+                outlier = B_ols(j,:) < obj.prior.Bmin;
+                B_ols(j, filter & outlier') = obj.prior.Bmin * (1+0.1*rand());
                 B_ols(filter, j) = B_ols(j, filter);
                 B_ols(j, j) = -sum(B_ols(j, :));
             end
-%             G_ols = (G_ols + G_ols') / 2;
-%             B_ols = (B_ols + B_ols') / 2;
-            
-%             G = lasso(obj.data.Vm_noised', IP(1,:)');
 
             obj.dataE.G = G_ols;
             obj.dataE.B = B_ols;
