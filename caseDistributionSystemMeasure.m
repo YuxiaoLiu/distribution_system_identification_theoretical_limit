@@ -121,11 +121,11 @@ classdef caseDistributionSystemMeasure < caseDistributionSystem
             % part of the power flow equations.
             h = sparse(obj.numFIM.Sum, 1);
             theta_ij = obj.dataE.Va(bus, snap) - obj.dataE.Va(:, snap);
-%             Theta_ij = repmat(obj.dataE.Va(:, snap), 1, obj.numBus) - repmat(obj.dataE.Va(:, snap)', obj.numBus, 1);
-%             % G_ij\cos(\Theta_ij)+B_ij\sin(\Theta_ij)
-%             GBThetaP = obj.dataE.G .* cos(Theta_ij) + obj.dataE.B .* sin(Theta_ij);
-%             % G_ij\sin(\Theta_ij)-B_ij\cos(\Theta_ij)
-%             GBThetaQ = obj.dataE.G .* sin(Theta_ij) - obj.dataE.B .* cos(Theta_ij);
+            Theta_ij = repmat(obj.dataE.Va(:, snap), 1, obj.numBus) - repmat(obj.dataE.Va(:, snap)', obj.numBus, 1);
+            % G_ij\cos(\Theta_ij)+B_ij\sin(\Theta_ij)
+            GBThetaP = obj.dataE.G .* cos(Theta_ij) + obj.dataE.B .* sin(Theta_ij);
+            % G_ij\sin(\Theta_ij)-B_ij\cos(\Theta_ij)
+            GBThetaQ = obj.dataE.G .* sin(Theta_ij) - obj.dataE.B .* cos(Theta_ij);
             
             % G matrix
             H_G = zeros(obj.numBus, obj.numBus);
@@ -176,11 +176,11 @@ classdef caseDistributionSystemMeasure < caseDistributionSystem
             % part of the power flow equations.
             h = sparse(obj.numFIM.Sum, 1);
             theta_ij = obj.dataE.Va(bus, snap) - obj.dataE.Va(:, snap);
-%             Theta_ij = repmat(obj.dataE.Va(:, snap), 1, obj.numBus) - repmat(obj.dataE.Va(:, snap)', obj.numBus, 1);
-%             % G_ij\cos(\Theta_ij)+B_ij\sin(\Theta_ij)
-%             GBThetaP = obj.dataE.G .* cos(Theta_ij) + obj.dataE.B .* sin(Theta_ij);
-%             % G_ij\sin(\Theta_ij)-B_ij\cos(\Theta_ij)
-%             GBThetaQ = obj.dataE.G .* sin(Theta_ij) - obj.dataE.B .* cos(Theta_ij);
+            Theta_ij = repmat(obj.dataE.Va(:, snap), 1, obj.numBus) - repmat(obj.dataE.Va(:, snap)', obj.numBus, 1);
+            % G_ij\cos(\Theta_ij)+B_ij\sin(\Theta_ij)
+            GBThetaP = obj.dataE.G .* cos(Theta_ij) + obj.dataE.B .* sin(Theta_ij);
+            % G_ij\sin(\Theta_ij)-B_ij\cos(\Theta_ij)
+            GBThetaQ = obj.dataE.G .* sin(Theta_ij) - obj.dataE.B .* cos(Theta_ij);
             
 %             % G matrix
 %             H_G = zeros(obj.numBus, obj.numBus);
@@ -315,8 +315,8 @@ classdef caseDistributionSystemMeasure < caseDistributionSystem
             obj.dataE.G = obj.data.G .* randG;
             obj.dataE.B = obj.data.B .* randB;
             % The approximation of the diagonal elements
-%             diagG = sum(obj.dataE.G);
-%             diagB = sum(obj.dataE.B);
+%             diagG = diag(obj.dataE.G);
+%             diagB = diag(obj.dataE.B);
             
             % approximate the topology using Vm data only
             % ranking the Vm
