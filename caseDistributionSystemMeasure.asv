@@ -120,7 +120,7 @@ classdef caseDistributionSystemMeasure < caseDistributionSystem
             % This method approximate the P part of FIM. We ignore the sin
             % part of the power flow equations.
             h = sparse(obj.numFIM.Sum, 1);
-            theta_ij = obj.dataE.Va(bus, snap) - obj.dataE.Va(:, snap);
+%             theta_ij = obj.dataE.Va(bus, snap) - obj.dataE.Va(:, snap);
 %             Theta_ij = repmat(obj.dataE.Va(:, snap), 1, obj.numBus) - repmat(obj.dataE.Va(:, snap)', obj.numBus, 1);
 %             % G_ij\cos(\Theta_ij)+B_ij\sin(\Theta_ij)
 %             GBThetaP = obj.dataE.G .* cos(Theta_ij) + obj.dataE.B .* sin(Theta_ij);
@@ -175,7 +175,7 @@ classdef caseDistributionSystemMeasure < caseDistributionSystem
             % This method approximate the Q part of FIM. We ignore the sin
             % part of the power flow equations.
             h = sparse(obj.numFIM.Sum, 1);
-            theta_ij = obj.dataE.Va(bus, snap) - obj.dataE.Va(:, snap);
+%             theta_ij = obj.dataE.Va(bus, snap) - obj.dataE.Va(:, snap);
 %             Theta_ij = repmat(obj.dataE.Va(:, snap), 1, obj.numBus) - repmat(obj.dataE.Va(:, snap)', obj.numBus, 1);
 %             % G_ij\cos(\Theta_ij)+B_ij\sin(\Theta_ij)
 %             GBThetaP = obj.dataE.G .* cos(Theta_ij) + obj.dataE.B .* sin(Theta_ij);
