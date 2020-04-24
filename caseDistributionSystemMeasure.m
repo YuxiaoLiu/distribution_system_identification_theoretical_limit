@@ -35,6 +35,7 @@ classdef caseDistributionSystemMeasure < caseDistributionSystem
             % we first evaluate the vm and the va
 %             obj.dataE.Vm = obj.data.Vm;%_noised;
 %             obj.dataE.Va = obj.data.Va;%_noised;
+
             obj.sigmaReal.Vm = cov(obj.data.Vm');
             mu = mean(obj.data.Vm, 2);
             rng(5);
@@ -121,11 +122,11 @@ classdef caseDistributionSystemMeasure < caseDistributionSystem
             % part of the power flow equations.
             h = sparse(obj.numFIM.Sum, 1);
             theta_ij = obj.dataE.Va(bus, snap) - obj.dataE.Va(:, snap);
-            Theta_ij = repmat(obj.dataE.Va(:, snap), 1, obj.numBus) - repmat(obj.dataE.Va(:, snap)', obj.numBus, 1);
-            % G_ij\cos(\Theta_ij)+B_ij\sin(\Theta_ij)
-            GBThetaP = obj.dataE.G .* cos(Theta_ij) + obj.dataE.B .* sin(Theta_ij);
-            % G_ij\sin(\Theta_ij)-B_ij\cos(\Theta_ij)
-            GBThetaQ = obj.dataE.G .* sin(Theta_ij) - obj.dataE.B .* cos(Theta_ij);
+%             Theta_ij = repmat(obj.dataE.Va(:, snap), 1, obj.numBus) - repmat(obj.dataE.Va(:, snap)', obj.numBus, 1);
+%             % G_ij\cos(\Theta_ij)+B_ij\sin(\Theta_ij)
+%             GBThetaP = obj.dataE.G .* cos(Theta_ij) + obj.dataE.B .* sin(Theta_ij);
+%             % G_ij\sin(\Theta_ij)-B_ij\cos(\Theta_ij)
+%             GBThetaQ = obj.dataE.G .* sin(Theta_ij) - obj.dataE.B .* cos(Theta_ij);
             
             % G matrix
             H_G = zeros(obj.numBus, obj.numBus);
@@ -133,11 +134,11 @@ classdef caseDistributionSystemMeasure < caseDistributionSystem
             h_G = obj.matToCol(H_G);
             h(1:obj.numFIM.G) = h_G;
             
-%             % B matrix
-%             H_B = zeros(obj.numBus, obj.numBus);
-%             H_B(bus, :) = obj.dataE.Vm(bus, snap) * obj.dataE.Vm(:, snap)' .* sin(theta_ij') / obj.k.B;
-%             h_B = obj.matToCol(H_B);
-%             h(obj.numFIM.G+1:obj.numFIM.G+obj.numFIM.B) = h_B;
+            % B matrix
+            H_B = zeros(obj.numBus, obj.numBus);
+            H_B(bus, :) = obj.dataE.Vm(bus, snap) * obj.dataE.Vm(:, snap)' .* sin(theta_ij') / obj.k.B;
+            h_B = obj.matToCol(H_B);
+            h(obj.numFIM.G+1:obj.numFIM.G+obj.numFIM.B) = h_B;
             
             % Vm
             % the first order term of other Vm
@@ -176,17 +177,17 @@ classdef caseDistributionSystemMeasure < caseDistributionSystem
             % part of the power flow equations.
             h = sparse(obj.numFIM.Sum, 1);
             theta_ij = obj.dataE.Va(bus, snap) - obj.dataE.Va(:, snap);
-            Theta_ij = repmat(obj.dataE.Va(:, snap), 1, obj.numBus) - repmat(obj.dataE.Va(:, snap)', obj.numBus, 1);
-            % G_ij\cos(\Theta_ij)+B_ij\sin(\Theta_ij)
-            GBThetaP = obj.dataE.G .* cos(Theta_ij) + obj.dataE.B .* sin(Theta_ij);
-            % G_ij\sin(\Theta_ij)-B_ij\cos(\Theta_ij)
-            GBThetaQ = obj.dataE.G .* sin(Theta_ij) - obj.dataE.B .* cos(Theta_ij);
+%             Theta_ij = repmat(obj.dataE.Va(:, snap), 1, obj.numBus) - repmat(obj.dataE.Va(:, snap)', obj.numBus, 1);
+%             % G_ij\cos(\Theta_ij)+B_ij\sin(\Theta_ij)
+%             GBThetaP = obj.dataE.G .* cos(Theta_ij) + obj.dataE.B .* sin(Theta_ij);
+%             % G_ij\sin(\Theta_ij)-B_ij\cos(\Theta_ij)
+%             GBThetaQ = obj.dataE.G .* sin(Theta_ij) - obj.dataE.B .* cos(Theta_ij);
             
-%             % G matrix
-%             H_G = zeros(obj.numBus, obj.numBus);
-%             H_G(bus, :) = obj.dataE.Vm(bus, snap) * obj.dataE.Vm(:, snap)' .* sin(theta_ij') / obj.k.G;
-%             h_G = obj.matToCol(H_G);
-%             h(1:obj.numFIM.G) = h_G;
+            % G matrix
+            H_G = zeros(obj.numBus, obj.numBus);
+            H_G(bus, :) = obj.dataE.Vm(bus, snap) * obj.dataE.Vm(:, snap)' .* sin(theta_ij') / obj.k.G;
+            h_G = obj.matToCol(H_G);
+            h(1:obj.numFIM.G) = h_G;
             
             % B matrix
             H_B = zeros(obj.numBus, obj.numBus);
@@ -309,14 +310,14 @@ classdef caseDistributionSystemMeasure < caseDistributionSystem
             % use the simple Ohom's law to provide an initial value of Y.
             % We also assume the G/B ratio is a constant.
             rng(103);
-            randG = 0.5 + 0.5 * randn(size(obj.data.G));
+            randG = 0.75 + 0.5 * randn(size(obj.data.G));
             rng(104);
-            randB = 0.5 + 0.5 * randn(size(obj.data.B));
+            randB = 0.75 + 0.5 * randn(size(obj.data.B));
             obj.dataE.G = obj.data.G .* randG;
             obj.dataE.B = obj.data.B .* randB;
             % The approximation of the diagonal elements
-%             diagG = diag(obj.dataE.G);
-%             diagB = diag(obj.dataE.B);
+            diagG = diag(obj.dataE.G);
+            diagB = diag(obj.dataE.B);
             
             % approximate the topology using Vm data only
             % ranking the Vm
@@ -327,7 +328,7 @@ classdef caseDistributionSystemMeasure < caseDistributionSystem
             
             assert (VmOrder(1) == 1); % the first bus is the source bus
             
-            Vm = movmean(Vm, floor(obj.numSnap/20), 2);
+            Vm = movmean(Vm, floor(obj.numSnap/20)+1, 2);
             corr = corrcoef(Vm');
             corr(isnan(corr)) = 0; % one can also simulate some disturbance in the source bus voltage
             for i = 2:obj.numBus
@@ -366,6 +367,7 @@ classdef caseDistributionSystemMeasure < caseDistributionSystem
                 rng(i);
                 filter(previous) = false;
                 VmDelta = Vm(filter, :) - repmat(Vm(j, :), sum(filter), 1);
+%                 G_ols(j, filter) = obj.tls(VmDelta', yG');
                 G_ols(j, filter) = yG * VmDelta' / (VmDelta * VmDelta');
                 outlier = G_ols(j,:) > -obj.prior.Gmin;
                 G_ols(j, filter & outlier') = - obj.prior.Gmin * (1+0.1*rand());
@@ -381,6 +383,9 @@ classdef caseDistributionSystemMeasure < caseDistributionSystem
 
             obj.dataE.G = G_ols;
             obj.dataE.B = B_ols;
+            
+            obj.dataE.G = obj.data.G;
+            obj.dataE.B = obj.data.B;
         end
     end
     

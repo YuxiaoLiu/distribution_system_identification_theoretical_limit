@@ -4,7 +4,8 @@ classdef caseDistributionSystem < handle
     properties
         caseName            % the name of the power system case
         mpc                 % the matpower struct of the power system
-        numBus              % the number of bus
+        numBus              % the number of buses
+        numBranch           % the number of branches
         numSnap             % the number of snapshot
         range               % the struct of deviation range
         numFIM              % the struct representing the size of FIM matrix
@@ -49,6 +50,7 @@ classdef caseDistributionSystem < handle
             % load the distribution system
             obj.mpc = loadcase(caseName);
             obj.numBus = size(obj.mpc.bus, 1);
+            obj.numBranch = size(obj.mpc.branch, 1);
             obj.numSnap = numSnap;
             obj.range = range;
                        
@@ -120,7 +122,13 @@ classdef caseDistributionSystem < handle
             data_.Q = zeros(obj.numBus, obj.numSnap);
             data_.Vm = zeros(obj.numBus, obj.numSnap);
             data_.Va = zeros(obj.numBus, obj.numSnap);
+            data_.PF = zeros(obj.numBranch, obj.numSnap);
+            data_.PT = zeros(obj.numBranch, obj.numSnap);
+            data_.QF = zeros(obj.numBranch, obj.numSnap);
+            data_.QT = zeros(obj.numBranch, obj.numSnap);
             isSuccess = ones(obj.numSnap, 1);
+            
+            define_constants;
             
             for i = 1:obj.numSnap
                 mpcThis = obj.mpc;
@@ -135,8 +143,12 @@ classdef caseDistributionSystem < handle
                 inject = makeSbus(mpcThis.baseMVA, mpcThis.bus, mpcThis.gen);
                 data_.P(:,i) = real(inject);
                 data_.Q(:,i) = imag(inject);
-                data_.Vm(:,i) = mpcThis.bus(:, 8);
-                data_.Va(:,i) = mpcThis.bus(:, 9)/180*pi;
+                data_.Vm(:,i) = mpcThis.bus(:, VM);
+                data_.Va(:,i) = mpcThis.bus(:, VA)/180*pi;
+                data_.PF(:,i) = mpcThis.branch(:, PF);
+                data_.PT(:,i) = mpcThis.branch(:, PT);
+                data_.QF(:,i) = mpcThis.branch(:, QF);
+                data_.QT(:,i) = mpcThis.branch(:, QT);
             end
             
             % assert that all the power flow converge
