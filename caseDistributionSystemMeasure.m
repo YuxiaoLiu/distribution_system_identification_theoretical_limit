@@ -11,6 +11,8 @@ classdef caseDistributionSystemMeasure < caseDistributionSystem
         A_FIM               % the approximated fisher information matrix
         A_FIMP              % the (sparse) FIM of active power injection
         A_FIMQ              % the (sparse) FIM of reactive power injection
+        
+        initPar             % the initial estimation of parameters and state variables
     end
     
     methods
@@ -53,6 +55,17 @@ classdef caseDistributionSystemMeasure < caseDistributionSystem
 %             obj.dataE.B = obj.data.B;
             
             obj = approximateY(obj);
+            
+            obj.dataE.Va = zeros(obj.numBus, obj.numSnap);
+            obj.dataE.Va(2:end, :) = - (obj.dataE.G(2:end, 2:end)) \ obj.data.P_noised(2:end, :);
+%             mu = mean(obj.data.Va, 2);
+%             obj.sigmaReal.P = cov(obj.data.P');
+%             obj.sigmaReal.Va = zeros(obj.numBus, obj.numBus);
+%             obj.sigmaReal.Va(2:end, 2:end) = ...
+%                 ((1.5*obj.dataE.G(2:end, 2:end)) \ obj.sigmaReal.P(2:end, 2:end)) / (1.5*obj.dataE.G(2:end, 2:end));
+%             rng(7);
+%             obj.dataE.Va = mvnrnd(mu, obj.sigmaReal.Va, obj.numSnap)';
+%             obj.dataE.Va(2:end, :) = -obj.dataE.G(2:end, 2:end) \ obj.data.P_noised(2:end, :);
         end
         
         function obj = approximateFIM(obj, varargin)
@@ -315,9 +328,9 @@ classdef caseDistributionSystemMeasure < caseDistributionSystem
             randB = 0.75 + 0.5 * randn(size(obj.data.B));
             obj.dataE.G = obj.data.G .* randG;
             obj.dataE.B = obj.data.B .* randB;
-            % The approximation of the diagonal elements
-            diagG = diag(obj.dataE.G);
-            diagB = diag(obj.dataE.B);
+%             % The approximation of the diagonal elements
+%             diagG = diag(obj.dataE.G);
+%             diagB = diag(obj.dataE.B);
             
             % approximate the topology using Vm data only
             % ranking the Vm
@@ -386,6 +399,29 @@ classdef caseDistributionSystemMeasure < caseDistributionSystem
             
             obj.dataE.G = obj.data.G;
             obj.dataE.B = obj.data.B;
+        end
+        
+        function obj = initValue(obj)
+            % This method provides the initial value (voltage angles?)
+            
+        end
+        
+        function obj = identifyMCMC(obj)
+            % This method uses the Markov Chain Monte Carlo to sample the
+            % distribution of the parameters and the topologies
+            
+            % Build the measurement function.
+            % Currently, we assume we know all the P, Q, Vm, Va
+            % measurements. We have to modify it later.
+            data.Pn = obj.data.P_noised;
+            data.Qn = obj.data.Q_noised;
+            data.Vmn = obj.data.Vm_noised;
+            data.Van = obj.data.Va_noised;
+            
+            par.G = obj.dataE.G;
+            par.B = obj.dataE.B;
+            par.Vm = obj.data.Vm_noised;
+            par.Va = obj.data.Va_noised;
         end
     end
     
