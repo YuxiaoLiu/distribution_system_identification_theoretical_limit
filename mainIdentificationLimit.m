@@ -66,7 +66,7 @@ caseDS = caseDS.preEvaluation(prior);
 caseDS = caseDS.approximateFIM(k);
 caseDS = caseDS.calABound;
 % caseDS = caseDS.initValue;
-caseDS = caseDS.identifyMCMC;
+caseDS = caseDS.identifyMCMCEIV;
 % caseDS = caseDS.buildFIM(k);
 % caseDS = caseDS.updateTopo(topoTol, admittanceOnly);
 profile off;

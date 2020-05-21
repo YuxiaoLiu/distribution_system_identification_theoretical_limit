@@ -406,9 +406,10 @@ classdef caseDistributionSystemMeasure < caseDistributionSystem
             
         end
         
-        function obj = identifyMCMC(obj)
+        function obj = identifyMCMCEIV(obj)
             % This method uses the Markov Chain Monte Carlo to sample the
-            % distribution of the parameters and the topologies
+            % distribution of the parameters and the topologies. We use the
+            % error-in-variables(EIV) assumption.
             
             % Build the measurement function.
             % Currently, we assume we know all the P, Q, Vm, Va
@@ -417,11 +418,20 @@ classdef caseDistributionSystemMeasure < caseDistributionSystem
             data.Qn = obj.data.Q_noised;
             data.Vmn = obj.data.Vm_noised;
             data.Van = obj.data.Va_noised;
+            data.num = obj.numFIM;
+            data.isMeasure = obj.isMeasure;
+            data.sigma = obj.sigma;
             
-            par.G = obj.dataE.G;
-            par.B = obj.dataE.B;
-            par.Vm = obj.data.Vm_noised;
-            par.Va = obj.data.Va_noised;
+            par = [obj.matOfCol(obj.dataE.G); obj.matOfCol(obj.dataE.B); ...
+                reshape(obj.data.Vm_noised(2:end,:), [], 1);... % we assume the value of the source bus is already known
+                reshape(obj.data.Va_noised(2:end,:), [], 1)];
+            assert (length(par) == obj.numFIM.Sum) % the number of total parameters
+%             par.G = obj.dataE.G;
+%             par.B = obj.dataE.B;
+%             par.Vm = obj.data.Vm_noised;
+%             par.Va = obj.data.Va_noised;
+            
+            ss = sumOfSquaresEIV(par, data);
         end
     end
     
@@ -445,7 +455,21 @@ classdef caseDistributionSystemMeasure < caseDistributionSystem
             for i = zero
                 B = [B(1:i-1); 0; B(i:end)];
             end
+        end
+        
+        function h = matOfCol(H)
+            % This method get the half triangle of a matrix
+            H_up = tril(H, 1)';
+            n = size(H, 1);
+            N = (n + 1) * n / 2;
+            h = zeros(N, 1);
+            pt = 1;
+            for i = 1:n
+                h(pt:pt+n-i) = H_up(i, i:end);
+                pt = pt+n-i+1;
             end
+        end
+        
     end
 end
 

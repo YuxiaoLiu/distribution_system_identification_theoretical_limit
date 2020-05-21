@@ -413,8 +413,24 @@ classdef caseDistributionSystemMeasure < caseDistributionSystem
             % Build the measurement function.
             % Currently, we assume we know all the P, Q, Vm, Va
             % measurements. We have to modify it later.
-            data.P = obj.data.P_noised;
-            data.Q = obj.data.Q
+            data.Pn = obj.data.P_noised;
+            data.Qn = obj.data.Q_noised;
+            data.Vmn = obj.data.Vm_noised;
+            data.Van = obj.data.Va_noised;
+            data.num = obj.numFIM;
+            data.num.VmTotal = obj.numSnap * obj.numBus; % the total number
+            data.num.VaTotal = obj.numSnap * obj.numBus; % the total number
+            data.isMeasure = obj.isMeasure;
+            
+            par = [obj.matToCol(obj.dataE.G); obj.matToCol(obj.dataE.B); ...
+                reshape(obj.data.Vm_noised(2:end,:), [], 1);...
+                reshape(obj.data.Va_noised(2:end), [], 1)];
+%             par.G = obj.dataE.G;
+%             par.B = obj.dataE.B;
+%             par.Vm = obj.data.Vm_noised;
+%             par.Va = obj.data.Va_noised;
+            
+            ss = sumOfSquaresEIV(par, data);
         end
     end
     
@@ -438,7 +454,7 @@ classdef caseDistributionSystemMeasure < caseDistributionSystem
             for i = zero
                 B = [B(1:i-1); 0; B(i:end)];
             end
-            end
+        end
     end
 end
 
