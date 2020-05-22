@@ -3,14 +3,18 @@ function ss = sumOfSquaresEIV(par, data)
     % likelihood function.This is an error-in-variables formulation.
     
     % first we set a constant to reduce the value of the ss
-    kReduce = 100; % the reduce ratio is k^2
-    data.sigma.P = data.sigma.P * kReduce;
-    data.sigma.Q = data.sigma.Q * kReduce;
-    data.sigma.Vm = data.sigma.Vm * kReduce;
-    data.sigma.Va = data.sigma.Va * kReduce;
+%     kReduce = 100; % the reduce ratio is k^2
+%     data.sigma.P = data.sigma.P * kReduce;
+%     data.sigma.Q = data.sigma.Q * kReduce;
+%     data.sigma.Vm = data.sigma.Vm * kReduce;
+%     data.sigma.Va = data.sigma.Va * kReduce;
     
-    ss = 0;
     [numBus, numSnap] = size(data.Pn);
+    numMP = sum(data.isMeasure.P);
+    numMQ = sum(data.isMeasure.Q);
+    numMVm = sum(data.isMeasure.Vm);
+    numMVa = sum(data.isMeasure.Va);
+    numMeasure = numMP + numMQ + numMVm + numMVa;
     % recover the parameters
     G = colToMat(par(1:data.num.G), numBus);
     B = colToMat(par(1+data.num.G:data.num.G+data.num.B), numBus);
@@ -37,13 +41,13 @@ function ss = sumOfSquaresEIV(par, data)
         est.P(:, snap) = (GBThetaP * Vmn(:, snap)) .* Vmn(:, snap);
         est.Q(:, snap) = (GBThetaQ * Vmn(:, snap)) .* Vmn(:, snap);
     end
-    ss = ss + sum((sum((est.P - data.Pn), 2) ./ data.sigma.P) .^ 2);
-    ss = ss + sum((sum((est.Q - data.Qn), 2) ./ data.sigma.Q) .^ 2);
+    
+    ss = zeros(1, numMeasure);
+    ss(1:numMP) = (sum((est.P - data.Pn), 2))' .^ 2; % ./ data.sigma.P
+    ss(1+numMP:numMP+numMQ) = sum((sum((est.Q - data.Qn), 2) )' .^ 2); % ./ data.sigma.Q
     % the voltage magnitudes and angles
-    ss = ss + sum((sum((Vmn(2:end,:) - data.Vmn(2:end,:)), 2) ...
-        ./ data.sigma.Vm(2:end)) .^ 2);
-    ss = ss + sum((sum((Van(2:end,:) - data.Van(2:end,:)), 2) ...
-        ./ data.sigma.Va(2:end)) .^ 2);
+    ss(1+numMP+numMQ:numMP+numMQ+numMVm) = (sum((Vmn(2:end,:) - data.Vmn(2:end,:)), 2) )' .^ 2; % ./ data.sigma.Vm(2:end)
+    ss(1+numMP+numMQ+numMVm:end) = (sum((Van(2:end,:) - data.Van(2:end,:)), 2) )' .^ 2; % ./ data.sigma.Va(2:end)
 end
 
 function H = colToMat(h, n)

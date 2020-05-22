@@ -267,9 +267,11 @@ classdef caseDistributionSystemMeasure < caseDistributionSystem
                 B = obj.A_FIM(1:obj.numFIM.G+obj.numFIM.B, obj.numFIM.G+obj.numFIM.B+1:end);
                 C = obj.A_FIM(obj.numFIM.G+obj.numFIM.B+1:end, obj.numFIM.G+obj.numFIM.B+1:end);
                 obj.A_FIM = A - B/C*B';
-                var = diag(obj.A_FIM(obj.numFIM.index, obj.numFIM.index)\eye(sum(obj.numFIM.index)));
+                cov = obj.A_FIM(obj.numFIM.index, obj.numFIM.index)\eye(sum(obj.numFIM.index));
+                var = diag(cov);
             else
-                var = diag(obj.A_FIM(obj.numFIM.index, obj.numFIM.index)\eye(sum(obj.numFIM.index)));
+                cov = obj.A_FIM(obj.numFIM.index, obj.numFIM.index)\eye(sum(obj.numFIM.index));
+                var = diag(cov);
 %                 % we construct a Hermitian matrix H and use Cholesky
 %                 % decomposition to compute the inverse matrix
 %                 FIM = obj.A_FIM(obj.numFIM.index, obj.numFIM.index);
@@ -280,10 +282,12 @@ classdef caseDistributionSystemMeasure < caseDistributionSystem
             end
             if min(var) < 0
                 var = abs(var);
+                cov = cov - diag(diag(cov)) + diag(var);
                 fprintf('We use the absolute value of the variance.\n');
             end
             
             obj.boundA.total = sqrt(var);
+            obj.boundA.cov = cov;
             
             boundG = zeros(obj.numFIM.G, 1);
             boundG(obj.numFIM.index(1:obj.numFIM.G)) = obj.boundA.total(1:obj.numFIM.G-obj.numFIM.del) / obj.k.G;
@@ -422,16 +426,53 @@ classdef caseDistributionSystemMeasure < caseDistributionSystem
             data.isMeasure = obj.isMeasure;
             data.sigma = obj.sigma;
             
-            par = [obj.matOfCol(obj.dataE.G); obj.matOfCol(obj.dataE.B); ...
-                reshape(obj.data.Vm_noised(2:end,:), [], 1);... % we assume the value of the source bus is already known
-                reshape(obj.data.Va_noised(2:end,:), [], 1)];
+            % build the parameters
+            G = obj.matOfCol(obj.dataE.G);
+            B = obj.matOfCol(obj.dataE.B);
+            Vm = reshape(obj.data.Vm_noised(2:end,:), [], 1); % we assume the value of the source bus is already known
+            Va = reshape(obj.data.Va_noised(2:end,:), [], 1);
+            par = [G' B' Vm' Va'];
             assert (length(par) == obj.numFIM.Sum) % the number of total parameters
-%             par.G = obj.dataE.G;
-%             par.B = obj.dataE.B;
-%             par.Vm = obj.data.Vm_noised;
-%             par.Va = obj.data.Va_noised;
             
+            % build the params in the format of mcmc
+            params = cell(1, data.num.Sum);
+            for i = 1:data.num.G
+                params{i} = ...
+                    {sprintf('G_{%d}',i), G(i), -Inf, Inf, obj.boundA.total(i)};
+            end
+            for i = 1:data.num.B
+                params{i+data.num.G} = ...
+                    {sprintf('B_{%d}',i), B(i), -Inf, Inf, obj.boundA.total(i+data.num.G)};
+            end
+            for i = 1:data.num.Vm
+                params{i+data.num.G+data.num.B} =...
+                    {sprintf('Vm_{%d}',i), Vm(i), -Inf, Inf, obj.boundA.total(i+data.num.G+data.num.B)};
+            end
+            for i = 1:data.num.Va
+                params{i+data.num.G+data.num.B+data.num.Vm} =...
+                    {sprintf('Vm_{%d}',i), Va(i), -Inf, Inf, obj.boundA.total(i+data.num.G+data.num.B+data.num.Vm)};
+            end
             ss = sumOfSquaresEIV(par, data);
+            
+            % build the model
+            model.ssfun = @sumOfSquaresEIV;
+            % build the sigma2 (the sum of squares error of the measurements)
+            sigma2P = obj.sigma.P(obj.isMeasure.P).^2';
+            sigma2Q = obj.sigma.Q(obj.isMeasure.Q).^2';
+            sigma2Vm = obj.sigma.Vm(obj.isMeasure.Vm).^2';
+            sigma2Va = obj.sigma.Va(obj.isMeasure.Va).^2';
+            model.sigma2 = [sigma2P sigma2Q sigma2Vm sigma2Va];
+            model.S20 = model.sigma2;
+            model.N0 = obj.numSnap * ones(size(model.sigma2)); % we have very high accuracy
+            model.N = obj.numSnap;
+            
+            % build the options
+            options.nsimu = 10000;
+            options.qcov = obj.boundA.cov; % covariance from the initial fit
+%             ss = sumOfSquaresEIV(par, data);
+
+            % run the mcmc simulation
+            [res,chain,s2chain] = mcmcrun(model,data,params,options);
         end
     end
     
