@@ -436,9 +436,8 @@ classdef caseDistributionSystemMeasure < caseDistributionSystem
             constB = sum(B) == zeros(1, obj.numBus);
             constraints = [constP; constQ; constG; constB];
             for i = 1:obj.numBus
-                for j = i+1:obj.numBus
-                    constraints = [constraints; G(i,j)<=0];
-                    constraints = [constraints; B(i,j)>=0];
+                for j = i:obj.numBus
+                    constraints = [constraints; ];
                 end
             end
             
