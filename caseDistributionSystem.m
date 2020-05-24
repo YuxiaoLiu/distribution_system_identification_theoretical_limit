@@ -37,6 +37,9 @@ classdef caseDistributionSystem < handle
         topoTol             % the tolerance of topology identification (forcing the small value to zero)
         boundIter           % the iteration history of the bounds
         acc                 % the accuracy of topology identification
+        
+        P_delta             % the delta value considering measurement noise
+        Q_delta             % the delta value considering measurement noise
     end
     
     methods
@@ -208,16 +211,16 @@ classdef caseDistributionSystem < handle
             obj.sigma.Va(1) = 0;
             
             % we generate the measurement noise
-            rng(1);
+            rng(1000);
             obj.data.P_noise = randn(obj.numBus, obj.numSnap);
             obj.data.P_noise = bsxfun(@times, obj.data.P_noise, obj.sigma.P);
-            rng(2);
+            rng(2000);
             obj.data.Q_noise = randn(obj.numBus, obj.numSnap);
             obj.data.Q_noise = bsxfun(@times, obj.data.Q_noise, obj.sigma.Q);
-            rng(3);
+            rng(3000);
             obj.data.Vm_noise = randn(obj.numBus, obj.numSnap);
             obj.data.Vm_noise = bsxfun(@times, obj.data.Vm_noise, obj.sigma.Vm);
-            rng(4);
+            rng(4000);
             obj.data.Va_noise = randn(obj.numBus, obj.numSnap);
             obj.data.Va_noise = bsxfun(@times, obj.data.Va_noise, obj.sigma.Va);
             
@@ -322,6 +325,20 @@ classdef caseDistributionSystem < handle
             Q = (GBThetaQ * obj.data.Vm(:, snap)) .* obj.data.Vm(:, snap);
             deltaQ = Q - obj.data.Q(:, snap);
             assert (sum(abs(deltaQ)) <= 1e-6 );
+ 
+%             % this code was used to test the scale of the noise
+%             Theta_ij_ = repmat(obj.data.Va_noised(:, snap), 1, obj.numBus) - repmat(obj.data.Va_noised(:, snap)', obj.numBus, 1);
+%             % G_ij\cos(\Theta_ij)+B_ij\sin(\Theta_ij)
+%             GBThetaP_ = obj.data.G .* cos(Theta_ij_) + obj.data.B .* sin(Theta_ij_);
+%             % G_ij\sin(\Theta_ij)-B_ij\cos(\Theta_ij)
+%             GBThetaQ_ = obj.data.G .* sin(Theta_ij_) - obj.data.B .* cos(Theta_ij_);
+
+%             P_ = (GBThetaP_ * obj.data.Vm_noised(:, snap)) .* obj.data.Vm_noised(:, snap);
+%             deltaP_ = P_ - obj.data.P(:, snap);
+%             obj.P_delta = [obj.P_delta deltaP_];
+%             Q_ = (GBThetaQ_ * obj.data.Vm_noised(:, snap)) .* obj.data.Vm_noised(:, snap);
+%             deltaQ_ = Q_ - obj.data.Q(:, snap);
+%             obj.Q_delta = [obj.Q_delta deltaQ_];
             
             % G matrix
             H_G = zeros(obj.numBus, obj.numBus);

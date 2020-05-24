@@ -399,11 +399,11 @@ classdef caseDistributionSystemMeasure < caseDistributionSystem
                 B_ols(j, j) = -sum(B_ols(j, :));
             end
 
-%             obj.dataE.G = G_ols;
-%             obj.dataE.B = B_ols;
+            obj.dataE.G = G_ols;
+            obj.dataE.B = B_ols;
             
-            obj.dataE.G = (G+G')/2;
-            obj.dataE.B = (B+B')/2;
+%             obj.dataE.G = (G+G')/2;
+%             obj.dataE.B = (B+B')/2;
             
 %             obj.dataE.G = obj.data.G;
 %             obj.dataE.B = obj.data.B;
@@ -514,26 +514,31 @@ classdef caseDistributionSystemMeasure < caseDistributionSystem
             sigma2Q = obj.sigma.Q(obj.isMeasure.Q).^2';
             sigma2Vm = obj.sigma.Vm(obj.isMeasure.Vm).^2';
             sigma2Va = obj.sigma.Va(obj.isMeasure.Va).^2';
-            model.sigma2 = [sigma2P sigma2Q sigma2Vm sigma2Va];
+            model.sigma2 = [sigma2P sigma2Q sigma2Vm sigma2Va] * 10000000;
             model.S20 = model.sigma2;
             model.N = obj.numSnap;
             
             % build the options
-            options.nsimu = 2000;
+            options.nsimu = 40000;
             options.qcov = obj.boundA.cov;
             numGB = obj.numFIM.G+obj.numFIM.B;
-            options.qcov(1:numGB,1:numGB) = options.qcov(1:numGB,1:numGB)*100;
+            options.qcov(1:numGB,1:numGB) = options.qcov(1:numGB,1:numGB) * 1;
 
-%             % run the mcmc simulation
-%             [res,chain,s2chain] = mcmcrun(model,data,params,options);
+            % run the mcmc simulation
+            [res,chain,s2chain] = mcmcrun(model,data,params,options);
             
             % run the mcmc simulation and update the cov matrix iteratively
+            options.nsimu = 2000;
             numIter = 10;
             Gs = cell(1, numIter);
             Bs = cell(1, numIter);
             chains = [];
+            errorInit = sum(sumOfSquaresEIV(par, data) ./ model.sigma2);
+            errorTrue = sum(sumOfSquaresEIV(obj.truePar, data) ./ model.sigma2);
+            errorEval = sum(sumOfSquaresEIV(res.theta', data) ./ model.sigma2)
             for i = 1:10
                 [res,chain,~] = mcmcrun(model,data,params,options);
+                errorEval = sum(sumOfSquaresEIV(res.theta', data) ./ model.sigma2)
                 Gs{i} = res.theta(1:data.num.G);
                 Bs{i} = res.theta(1+data.num.G:data.num.G+data.num.B);
                 chains = [chains;chain];
@@ -549,6 +554,68 @@ classdef caseDistributionSystemMeasure < caseDistributionSystem
             errorInit = sum(sumOfSquaresEIV(par, data) ./ model.sigma2);
             errorTrue = sum(sumOfSquaresEIV(obj.truePar, data) ./ model.sigma2);
             errorEval = sum(sumOfSquaresEIV(res.theta', data) ./ model.sigma2);
+        end
+        
+        function obj = identifyMCMCEIO(obj)
+            % This method uses the Markov Chain Monte Carlo to sample the
+            % distribution of the parameters and the topologies. We use the
+            % error-in-outputs(EIV) assumption.
+            % Build the measurement function.
+            
+            % Currently, we assume we know all the P, Q, Vm, Va
+            % measurements. We have to modify it later.
+            data.Pn = obj.data.P_noised;
+            data.Qn = obj.data.Q_noised;
+            data.Vmn = obj.data.Vm_noised;
+            data.Van = obj.data.Va_noised;
+            data.num = obj.numFIM;
+            data.isMeasure = obj.isMeasure;
+            data.sigma = obj.sigma;
+            
+            % build the parameters
+            G = obj.matOfCol(obj.dataE.G);
+            B = obj.matOfCol(obj.dataE.B);
+            par = [G' B'];
+            
+            % we also build the ground truth value of the parameters
+            Gtr = obj.matOfCol(obj.data.G);
+            Btr = obj.matOfCol(obj.data.B);
+            obj.truePar = [Gtr' Btr'];
+            
+            % build the params in the format of mcmc
+            params = cell(1, data.num.G+data.num.B);
+            for i = 1:data.num.G
+                params{i} = ...
+                    {sprintf('G_{%d}',i), G(i), -Inf, Inf, obj.boundA.total(i)};
+            end
+            for i = 1:data.num.B
+                params{i+data.num.G} = ...
+                    {sprintf('B_{%d}',i), B(i), -Inf, Inf, obj.boundA.total(i+data.num.G)};
+            end
+            
+            % build the model
+            model.ssfun = @sumOfSquaresEIO;
+            % build the sigma2 (the sum of squares error of the measurements)
+            % we use the summation of G and B matrices to approximate the
+            % first order of measurement noises
+            sumG = diag(obj.dataE.G);
+            sumB = diag(obj.dataE.B);
+            sigma2P = sumG(obj.isMeasure.P).^2';
+            sigma2Q = sumB(obj.isMeasure.Q).^2';
+            model.sigma2 = [sigma2P sigma2Q] / 100000;
+            model.S20 = model.sigma2;
+            model.N = obj.numSnap;
+            
+            % build the options
+            options.nsimu = 5000;
+            numGB = obj.numFIM.G+obj.numFIM.B;
+            options.qcov = obj.boundA.cov(1:numGB, 1:numGB);
+            
+            % run the mcmc
+            [res,chain,s2chain] = mcmcrun(model,data,params,options);
+            errorInit = sum(sumOfSquaresEIO(par, data) ./ model.sigma2);
+            errorTrue = sum(sumOfSquaresEIO(obj.truePar, data) ./ model.sigma2);
+            errorEval = sum(sumOfSquaresEIO(res.theta', data) ./ model.sigma2);
         end
     end
     
