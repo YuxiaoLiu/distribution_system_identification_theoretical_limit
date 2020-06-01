@@ -35,8 +35,8 @@ function ss = sumOfSquaresEIO(par, data)
     end
     
     ss = zeros(1, numMeasure);
-    ss(1:numMP) = (sum((est.P - data.Pn), 2))' .^ 2; % ./ data.sigma.P
-    ss(1+numMP:numMP+numMQ) = sum((sum((est.Q - data.Qn), 2) )' .^ 2); % ./ data.sigma.Q
+    ss(1:numMP) = (sum((est.P - data.Pn) .^ 2, 2))'; % ./ data.sigma.P
+    ss(1+numMP:numMP+numMQ) = (sum((est.Q - data.Qn) .^ 2, 2) )'; % ./ data.sigma.Q
 end
 
 function H = colToMat(h, n)

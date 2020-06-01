@@ -43,11 +43,11 @@ function ss = sumOfSquaresEIV(par, data)
     end
     
     ss = zeros(1, numMeasure);
-    ss(1:numMP) = (sum((est.P - data.Pn), 2))' .^ 2; % ./ data.sigma.P
-    ss(1+numMP:numMP+numMQ) = sum((sum((est.Q - data.Qn), 2) )' .^ 2); % ./ data.sigma.Q
+    ss(1:numMP) = (sum((est.P - data.Pn) .^ 2, 2))'; % ./ data.sigma.P
+    ss(1+numMP:numMP+numMQ) = sum((sum((est.Q - data.Qn).^ 2, 2) )' ); % ./ data.sigma.Q
     % the voltage magnitudes and angles
-    ss(1+numMP+numMQ:numMP+numMQ+numMVm) = (sum((Vmn(2:end,:) - data.Vmn(2:end,:)), 2) )' .^ 2; % ./ data.sigma.Vm(2:end)
-    ss(1+numMP+numMQ+numMVm:end) = (sum((Van(2:end,:) - data.Van(2:end,:)), 2) )' .^ 2; % ./ data.sigma.Va(2:end)
+    ss(1+numMP+numMQ:numMP+numMQ+numMVm) = (sum((Vmn(2:end,:) - data.Vmn(2:end,:)).^ 2, 2) )' ; % ./ data.sigma.Vm(2:end)
+    ss(1+numMP+numMQ+numMVm:end) = (sum((Van(2:end,:) - data.Van(2:end,:)).^ 2, 2) )' ; % ./ data.sigma.Va(2:end)
 end
 
 function H = colToMat(h, n)
