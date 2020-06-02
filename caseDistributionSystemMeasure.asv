@@ -457,6 +457,91 @@ classdef caseDistributionSystemMeasure < caseDistributionSystem
             
         end
         
+        function obj = identifyOptNLP(obj)
+            % This method simply use the nonlinar programming techique to
+            % solve the maximum identification problem
+            
+            % This version we simply assume we have all the measurements
+            % We should bound all the control variables and all the
+            % anxillary variables
+            
+            % control variables
+            G = sdpvar(obj.numBus, obj.numBus);
+            B = sdpvar(obj.numBus, obj.numBus);
+            Pest = sdpvar(obj.numBus, obj.numSnap);
+            Qest = sdpvar(obj.numBus, obj.numSnap);
+            Vm = sdpvar(obj.numBus, obj.numSnap);
+            Va = sdpvar(obj.numBus, obj.numSnap);
+            % anxillary variables
+            e_P = sdpvar(obj.numBus, obj.numSnap);
+            e_Q = sdpvar(obj.numBus, obj.numSnap);
+            e_Vm = sdpvar(obj.numBus, obj.numSnap);
+            e_Va = sdpvar(obj.numBus, obj.numSnap);
+            % some constaints
+            maxGB = 1000;
+            maxNoise = 10;
+            
+            % constraints
+            Constraints = [];
+            % the power flow equation, P and Q injections
+            for snap = 1:obj.numSnap
+                Theta_ij = repmat(Va(:, snap), 1, obj.numBus) - repmat(Va(:, snap)', obj.numBus, 1);
+                % G_ij\cos(\Theta_ij)+B_ij\sin(\Theta_ij)
+                GBThetaP = G .* cos(Theta_ij) + B .* sin(Theta_ij);
+                % G_ij\sin(\Theta_ij)-B_ij\cos(\Theta_ij)
+                GBThetaQ = G .* sin(Theta_ij) - B .* cos(Theta_ij);
+                Constraints = [Constraints; Pest(:, snap) == (GBThetaP * Vm(:, snap)) .* Vm(:, snap)];
+                Constraints = [Constraints; Qest(:, snap) == (GBThetaQ * Vm(:, snap)) .* Vm(:, snap)];
+            end
+            % the anxillary variable constraints
+            Constraints = [Constraints; Pest + e_P == obj.data.P_noised];
+            Constraints = [Constraints; Qest + e_Q == obj.data.Q_noised];
+            Constraints = [Constraints; Vm + e_Vm == obj.data.Vm_noised];
+            Constraints = [Constraints; Va + e_Va == obj.data.Va_noised];
+            % zero noise for reference bus
+            Constraints = [Constraints; e_Va(1,:) == zeros(1, obj.numSnap)];
+            Constraints = [Constraints; e_Vm(1,:) == zeros(1, obj.numSnap)];
+            % the sum of G and B
+            Constraints = [Constraints; sum(G) == zeros(1, obj.numBus)];
+            Constraints = [Constraints; sum(B) == zeros(1, obj.numBus)];
+            % bound all the variables
+            for i = 1:obj.numBus
+                for j = i+1:obj.numBus
+                    Constraints = [Constraints; -maxGB <= G(i,j) <= 0];
+                    Constraints = [Constraints; 0 <= B(i,j) <= maxGB];
+                end
+            end
+            Constraints = [Constraints; -obj.sigma.P*ones(1, obj.numSnap)*maxNoise <= e_P <= obj.sigma.P*ones(1, obj.numSnap)*maxNoise];
+            Constraints = [Constraints; -obj.sigma.Q*ones(1, obj.numSnap)*maxNoise <= e_Q <= obj.sigma.Q*ones(1, obj.numSnap)*maxNoise];
+            Constraints = [Constraints; -obj.sigma.Vm*ones(1, obj.numSnap)*maxNoise <= e_Vm <= obj.sigma.Vm*ones(1, obj.numSnap)*maxNoise];
+            Constraints = [Constraints; -obj.sigma.Va*ones(1, obj.numSnap)*maxNoise <= e_Va <= obj.sigma.Va*ones(1, obj.numSnap)*maxNoise];
+            
+            % assign the initial value
+            assign(G, obj.dataE.G);
+            assign(B, obj.dataE.B);
+            assign(Vm, obj.data.Vm_noised);
+            assign(Va, obj.data.Va_noised);
+            
+            % objective function
+            objective = sum((obj.sigma.P.^-2)' * (e_P.*e_P) ...
+                + (obj.sigma.Q.^-2)' * (e_Q.*e_Q)...
+                + (obj.sigma.Vm(2:end).^-2)' * (e_Vm(2:end,:).*e_Vm(2:end,:))...
+                + (obj.sigma.Va(2:end).^-2)' * (e_Va(2:end,:).*e_Va(2:end,:)));
+            options = sdpsettings('solver','ipopt','ipopt.max_iter','3000');
+            sol = optimize(Constraints,objective,options);
+            
+            Gopt = value(G);
+            Bopt = value(B);
+            Pestopt = value(Pest);
+            Qestopt = value(Qest);
+            Vmopt = value(Vm);
+            Vaopt = value(Va);
+            e_Popt = value(e_P);
+            e_Qopt = value(e_Q);
+            e_Vmopt = value(e_Vm);
+            e_Vaopt = value(e_Va);
+        end
+        
         function obj = identifyMCMCEIV(obj)
             % This method uses the Markov Chain Monte Carlo to sample the
             % distribution of the parameters and the topologies. We use the
