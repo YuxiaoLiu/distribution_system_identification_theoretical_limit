@@ -691,6 +691,20 @@ classdef caseDistributionSystem < handle
             end
             H = H + triu(H, 1)';
         end
+        
+        function H = colToMatDE(h, n)
+            % This method transform the column of half triangle to a
+            % symmetric matrix. The name DE denotes diagonal exclude.
+            H = zeros(n, n);
+            pt = 1;
+            for i = 1:n
+                H(i, i+1:end) = h(pt:pt+n-i-1);
+                pt = pt+n-i;
+            end
+            H = H + triu(H, 1)';
+            D = - diag(sum(H));
+            H = H + D;
+        end
     end
 end
 

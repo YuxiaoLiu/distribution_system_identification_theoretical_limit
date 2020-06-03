@@ -17,12 +17,19 @@ classdef caseDistributionSystemMeasure < caseDistributionSystem
         truePar             % the ground truth of the parameters
         
         grad                % the gradient vector
+        gradChain           % the chain of the gradients
         gradP               % the gradient vector from the measurement of P
         gradQ               % the gradient vector from the measurement of Q
         gradVm              % the gradient vector from the measurement of Vm
         gradVa              % the gradient vector from the measurement of Va
         numGrad             % the number of the gradient elements
-
+        loss                % the sum-of-squares loss function
+        lossChain           % the chain of the loss functions
+        parChain            % the chain of the parameters
+        
+        maxIter             % the maximum iteration in the gradient-based methods
+        step                % the step length of the iterations
+        iter                % the current iteration step
     end
     
     methods
@@ -560,6 +567,8 @@ classdef caseDistributionSystemMeasure < caseDistributionSystem
             % Hopefully we could implement some power system domain
             % knowledge into the process because we know the ground truth
             % value.
+            obj.maxIter = 1000;
+            obj.step = 0.2;
             
             % we first initialize data
             obj.dataO.G = obj.dataE.G;
@@ -569,28 +578,52 @@ classdef caseDistributionSystemMeasure < caseDistributionSystem
             obj.dataO.Vm = obj.data.Vm_noised;
             obj.dataO.Va = obj.data.Va_noised;
             
-            % build the gradient
-            obj = buildGradient(obj);
-            % tune the gradient vector
-            s = sqrt(obj.gradP .^ 2 + 1e-4);
-            temp = obj.gradP ./ s;
+            % begin the iteration loop
+            % initialize the gradient numbers
+            obj.numGrad.G = (obj.numBus - 1) * obj.numBus / 2; % exclude the diagonal elements
+            obj.numGrad.B = (obj.numBus - 1) * obj.numBus / 2;
+            obj.numGrad.Vm = obj.numSnap * (obj.numBus - 1); % exclude the source bus
+            obj.numGrad.Va = obj.numSnap * (obj.numBus - 1);
+            obj.numGrad.Sum = obj.numGrad.G + obj.numGrad.B + obj.numGrad.Vm + obj.numGrad.Va;
+            obj.iter = 1;
+            obj.gradChain = zeros(obj.numGrad.Sum, obj.maxIter);
+            obj.lossChain = zeros(5, obj.maxIter);
+            obj.parChain = zeros(obj.numGrad.Sum, obj.maxIter);
+            
+            while (obj.iter <= obj.maxIter)
+                % collect the paramter vector
+                obj = collectPar(obj);
+                % build the gradient
+                obj = buildGradient(obj);
+                % implement the re-weight techique.
+                obj = tuneGradient(obj);
+                % update the chains
+                obj.gradChain(:, obj.iter) = obj.grad;
+                obj.lossChain(:, obj.iter) = [obj.loss.total; obj.loss.P; obj.loss.Q; obj.loss.Vm; obj.loss.Va];
+                % update the parameters
+                obj = updatePar(obj);
+                % if converge
+                obj.iter = obj.iter + 1;
+            end
+            
         end
         
         function obj = buildGradient(obj)
             % This method build the gradient of the squared loss function
             
             % Initialize the gradient matrix
-            obj.numGrad.G = (obj.numBus - 1) * obj.numBus / 2; % exclude the diagonal elements
-            obj.numGrad.B = (obj.numBus - 1) * obj.numBus / 2;
-            obj.numGrad.Vm = obj.numSnap * (obj.numBus - 1); % exclude the source bus
-            obj.numGrad.Va = obj.numSnap * (obj.numBus - 1);
-            obj.numGrad.Sum = obj.numGrad.G + obj.numGrad.B + obj.numGrad.Vm + obj.numGrad.Va;
             
             obj.grad = zeros(obj.numGrad.Sum, 1);
             obj.gradP = zeros(obj.numGrad.Sum, 1);
             obj.gradQ = zeros(obj.numGrad.Sum, 1);
             obj.gradVm = zeros(obj.numGrad.Sum, 1);
             obj.gradVa = zeros(obj.numGrad.Sum, 1);
+            
+            obj.loss.total = 0;
+            obj.loss.P = 0;
+            obj.loss.Q = 0;
+            obj.loss.Vm = 0;
+            obj.loss.Va = 0;
             
             for i = 1:obj.numSnap
                 % calculate some basic parameters at present state
@@ -633,8 +666,9 @@ classdef caseDistributionSystemMeasure < caseDistributionSystem
                 end
             end
             
-            % collect the gradients
+            % collect the gradients and the losses
             obj.grad = obj.gradP + obj.gradQ + obj.gradVm + obj.gradVa;
+            obj.loss.total = obj.loss.P + obj.loss.Q + obj.loss.Vm + obj.loss.Va;
         end
         
         function obj = buildGradientP(obj , snap, bus, GBThetaP, GBThetaQ, Pest)
@@ -682,8 +716,10 @@ classdef caseDistributionSystemMeasure < caseDistributionSystem
             h_VaLarge = reshape(H_Va', [], 1);
             g(obj.numGrad.G+obj.numGrad.B+obj.numGrad.Vm+1:end) = h_VaLarge;
             
-            % build GradientP
-            gradPThis = obj.sigma.P(bus).^(-2) * (Pest(bus) - obj.data.P_noised(bus, snap)) * g;
+            % build GradientP and loss.P
+            lossThis = (Pest(bus) - obj.data.P_noised(bus, snap));
+            obj.loss.P = obj.loss.P + lossThis^2 * obj.sigma.P(bus).^(-2);
+            gradPThis = obj.sigma.P(bus).^(-2) * lossThis * g;
             obj.gradP = obj.gradP + gradPThis;
         end
         
@@ -732,8 +768,10 @@ classdef caseDistributionSystemMeasure < caseDistributionSystem
             h_VaLarge = reshape(H_Va', [], 1);
             g(obj.numGrad.G+obj.numGrad.B+obj.numGrad.Vm+1:end) = h_VaLarge;
             
-            % build GradientQ
-            gradQThis = obj.sigma.Q(bus).^(-2) * (Qest(bus) - obj.data.Q_noised(bus, snap)) * g;
+            % build GradientQ and lossQ
+            lossThis = (Qest(bus) - obj.data.Q_noised(bus, snap));
+            obj.loss.Q = obj.loss.Q + lossThis^2 * obj.sigma.Q(bus).^(-2);
+            gradQThis = obj.sigma.Q(bus).^(-2) * lossThis * g;
             obj.gradQ = obj.gradQ + gradQThis;
         end
         
@@ -747,8 +785,10 @@ classdef caseDistributionSystemMeasure < caseDistributionSystem
             h_VmLarge = reshape(H_Vm', [], 1);
             g(obj.numGrad.G+obj.numGrad.B+1:obj.numGrad.G+obj.numGrad.B+obj.numGrad.Vm) = h_VmLarge;
             
-            % build GradientVm
-            gradVmThis = (obj.dataO.Vm(bus, snap) - obj.data.Vm_noised(bus, snap)) * g;
+            % build GradientVm and lossVm
+            lossThis = (obj.dataO.Vm(bus, snap) - obj.data.Vm_noised(bus, snap));
+            obj.loss.Vm = obj.loss.Vm + lossThis^2 * obj.sigma.Vm(bus).^(-2);
+            gradVmThis = lossThis * g;
             obj.gradVm = obj.gradVm + gradVmThis;
         end
         
@@ -762,9 +802,131 @@ classdef caseDistributionSystemMeasure < caseDistributionSystem
             h_VaLarge = reshape(H_Va', [], 1);
             g(obj.numGrad.G+obj.numGrad.B+obj.numGrad.Vm+1:end) = h_VaLarge;
             
-            % build GradientVa
-            gradVaThis = (obj.dataO.Va(bus, snap) - obj.data.Va_noised(bus, snap)) * g;
+            % build GradientVa and lossVa
+            lossThis = (obj.dataO.Va(bus, snap) - obj.data.Va_noised(bus, snap));
+            obj.loss.Va = obj.loss.Va + lossThis^2 * obj.sigma.Va(bus).^(-2);
+            gradVaThis = lossThis * g;
             obj.gradVa = obj.gradVa + gradVaThis;
+        end
+        
+        function obj = tuneGradient(obj)
+            % This method tunes the gradient according to the weights
+            
+            % The weight of the initial gradient
+            wg.P.G = mean(abs(obj.gradP(1:obj.numGrad.G)));
+            wg.P.B = mean(abs(obj.gradP(1+obj.numGrad.G:obj.numGrad.G+obj.numGrad.B)));
+            wg.P.Vm = mean(abs(obj.gradP(1+obj.numGrad.G+obj.numGrad.B:obj.numGrad.G+obj.numGrad.B+obj.numGrad.Vm)));
+            wg.P.Va = mean(abs(obj.gradP(1+obj.numGrad.G+obj.numGrad.B+obj.numGrad.Vm:end)));
+            wg.Q.G = mean(abs(obj.gradQ(1:obj.numGrad.G)));
+            wg.Q.B = mean(abs(obj.gradQ(1+obj.numGrad.G:obj.numGrad.G+obj.numGrad.B)));
+            wg.Q.Vm = mean(abs(obj.gradQ(1+obj.numGrad.G+obj.numGrad.B:obj.numGrad.G+obj.numGrad.B+obj.numGrad.Vm)));
+            wg.Q.Va = mean(abs(obj.gradQ(1+obj.numGrad.G+obj.numGrad.B+obj.numGrad.Vm:end)));
+            wg.Vm = mean(abs(obj.gradVm(1+obj.numGrad.G+obj.numGrad.B:obj.numGrad.G+obj.numGrad.B+obj.numGrad.Vm)));
+            wg.Va = mean(abs(obj.gradVa(1+obj.numGrad.G+obj.numGrad.B+obj.numGrad.Vm:end)));
+            % The weight of the CRLB
+            wb.G = mean(obj.boundA.total(1:obj.numFIM.G));
+            wb.B = mean(obj.boundA.total(1+obj.numFIM.G:obj.numFIM.G+obj.numFIM.B));
+            wb.Vm = mean(abs(obj.boundA.total(1+obj.numFIM.G+obj.numFIM.B:obj.numFIM.G+obj.numFIM.B+obj.numFIM.Vm)));
+            wb.Va = mean(abs(obj.boundA.total(1+obj.numFIM.G+obj.numFIM.B+obj.numFIM.Vm:end)));
+            % The weight of the loss function
+            wl.total = sqrt(obj.loss.P) + sqrt(obj.loss.Q) + sqrt(obj.loss.Vm) + sqrt(obj.loss.Va);
+            wl.P = sqrt(obj.loss.P) / wl.total;
+            wl.Q = sqrt(obj.loss.Q) / wl.total;
+            wl.Vm = sqrt(obj.loss.Vm) / wl.total;
+            wl.Va = sqrt(obj.loss.Va) / wl.total;
+            % The conditional weights
+            wl.GP = wl.P / (wl.P + wl.Q + 1e-9);
+            wl.GQ = wl.Q / (wl.P + wl.Q + 1e-9);
+            wl.BP = wl.P / (wl.P + wl.Q + 1e-9);
+            wl.BQ = wl.Q / (wl.P + wl.Q + 1e-9);
+            wl.VmP = wl.P / (wl.P + wl.Q + wl.Vm + 1e-9);
+            wl.VmQ = wl.Q / (wl.P + wl.Q + wl.Vm + 1e-9);
+            wl.VmVm = wl.Vm / (wl.P + wl.Q + wl.Vm + 1e-9);
+            wl.VaP = wl.P / (wl.P + wl.Q + wl.Va + 1e-9);
+            wl.VaQ = wl.Q / (wl.P + wl.Q + wl.Va + 1e-9);
+            wl.VaVa = wl.Va / (wl.P + wl.Q + wl.Va + 1e-9);
+            
+            % tune the gradient vector. 
+            % normalize the gradient weight by P Q Vm Va
+            obj.gradP(1:obj.numGrad.G) = ...
+                obj.gradP(1:obj.numGrad.G) / (wg.P.G + 1e-9);
+            obj.gradP(1+obj.numGrad.G:obj.numGrad.G+obj.numGrad.B) = ...
+                obj.gradP(1+obj.numGrad.G:obj.numGrad.G+obj.numGrad.B) / (wg.P.B + 1e-9);
+            obj.gradP(1+obj.numGrad.G+obj.numGrad.B:obj.numGrad.G+obj.numGrad.B+obj.numGrad.Vm) = ...
+                obj.gradP(1+obj.numGrad.G+obj.numGrad.B:obj.numGrad.G+obj.numGrad.B+obj.numGrad.Vm) / (wg.P.Vm + 1e-9);
+            obj.gradP(1+obj.numGrad.G+obj.numGrad.B+obj.numGrad.Vm:end) = ...
+                obj.gradP(1+obj.numGrad.G+obj.numGrad.B+obj.numGrad.Vm:end) / (wg.P.Va + 1e-9);
+            
+            obj.gradQ(1:obj.numGrad.G) = ...
+                obj.gradQ(1:obj.numGrad.G) / (wg.Q.G + 1e-9);
+            obj.gradQ(1+obj.numGrad.G:obj.numGrad.G+obj.numGrad.B) = ...
+                obj.gradQ(1+obj.numGrad.G:obj.numGrad.G+obj.numGrad.B) / (wg.Q.B + 1e-9);
+            obj.gradQ(1+obj.numGrad.G+obj.numGrad.B:obj.numGrad.G+obj.numGrad.B+obj.numGrad.Vm) = ...
+                obj.gradQ(1+obj.numGrad.G+obj.numGrad.B:obj.numGrad.G+obj.numGrad.B+obj.numGrad.Vm) / (wg.Q.Vm + 1e-9);
+            obj.gradQ(1+obj.numGrad.G+obj.numGrad.B+obj.numGrad.Vm:end) = ...
+                obj.gradQ(1+obj.numGrad.G+obj.numGrad.B+obj.numGrad.Vm:end) / (wg.Q.Va + 1e-9);
+            
+            obj.gradVm(1+obj.numGrad.G+obj.numGrad.B:obj.numGrad.G+obj.numGrad.B+obj.numGrad.Vm) = ...
+                obj.gradVm(1+obj.numGrad.G+obj.numGrad.B:obj.numGrad.G+obj.numGrad.B+obj.numGrad.Vm) / (wg.Vm + 1e-9);
+            obj.gradVa(1+obj.numGrad.G+obj.numGrad.B+obj.numGrad.Vm:end) = ...
+                obj.gradVa(1+obj.numGrad.G+obj.numGrad.B+obj.numGrad.Vm:end) / (wg.Va + 1e-9);
+            
+            % we use the weight of the approximated CRLB and the weight
+            % from the loss function
+            
+            obj.gradP(1:obj.numGrad.G) = ...
+                obj.gradP(1:obj.numGrad.G) * wb.G * wl.GP;
+            obj.gradP(1+obj.numGrad.G:obj.numGrad.G+obj.numGrad.B) = ...
+                obj.gradP(1+obj.numGrad.G:obj.numGrad.G+obj.numGrad.B) * wb.B * wl.BP;
+            obj.gradP(1+obj.numGrad.G+obj.numGrad.B:obj.numGrad.G+obj.numGrad.B+obj.numGrad.Vm) = ...
+                obj.gradP(1+obj.numGrad.G+obj.numGrad.B:obj.numGrad.G+obj.numGrad.B+obj.numGrad.Vm) * wb.Vm * wl.VmP;
+            obj.gradP(1+obj.numGrad.G+obj.numGrad.B+obj.numGrad.Vm:end) = ...
+                obj.gradP(1+obj.numGrad.G+obj.numGrad.B+obj.numGrad.Vm:end) * wb.Va * wl.VaP;
+            
+            obj.gradQ(1:obj.numGrad.G) = ...
+                obj.gradQ(1:obj.numGrad.G) * wb.G * wl.GQ;
+            obj.gradQ(1+obj.numGrad.G:obj.numGrad.G+obj.numGrad.B) = ...
+                obj.gradQ(1+obj.numGrad.G:obj.numGrad.G+obj.numGrad.B) * wb.B * wl.BQ;
+            obj.gradQ(1+obj.numGrad.G+obj.numGrad.B:obj.numGrad.G+obj.numGrad.B+obj.numGrad.Vm) = ...
+                obj.gradQ(1+obj.numGrad.G+obj.numGrad.B:obj.numGrad.G+obj.numGrad.B+obj.numGrad.Vm) * wb.Vm * wl.VmQ;
+            obj.gradQ(1+obj.numGrad.G+obj.numGrad.B+obj.numGrad.Vm:end) = ...
+                obj.gradQ(1+obj.numGrad.G+obj.numGrad.B+obj.numGrad.Vm:end) * wb.Va * wl.VaQ;
+            
+            obj.gradVm(1+obj.numGrad.G+obj.numGrad.B:obj.numGrad.G+obj.numGrad.B+obj.numGrad.Vm) = ...
+                obj.gradVm(1+obj.numGrad.G+obj.numGrad.B:obj.numGrad.G+obj.numGrad.B+obj.numGrad.Vm) * wb.Vm * wl.VmVm;
+            obj.gradVa(1+obj.numGrad.G+obj.numGrad.B+obj.numGrad.Vm:end) = ...
+                obj.gradVa(1+obj.numGrad.G+obj.numGrad.B+obj.numGrad.Vm:end) * wb.Va * wl.VaVa;
+            
+            % collect the tuned gardient
+            obj.grad = obj.gradP + obj.gradQ + obj.gradVm + obj.gradVa;
+        end
+        
+        function obj = collectPar(obj)
+            % This method formulates the parameter vector
+            par = zeros(obj.numGrad.Sum, 1);
+            par(1:obj.numGrad.G) = obj.matOfColDE(obj.dataO.G);
+            par(1+obj.numGrad.G:obj.numGrad.G+obj.numGrad.B) = obj.matOfColDE(obj.dataO.B);
+            par(1+obj.numGrad.G+obj.numGrad.B:obj.numGrad.G+obj.numGrad.B+obj.numGrad.Vm) = ...
+                reshape(obj.dataO.Vm(2:end,:), [], 1); % we assume the value of the source bus is already known
+            par(1+obj.numGrad.G+obj.numGrad.B+obj.numGrad.Vm:end) = ...
+                reshape(obj.dataO.Va(2:end,:), [], 1);
+            obj.parChain(:, obj.iter) = par;
+        end
+        
+        function obj = updatePar(obj)
+            % This method updates the parameters in the iteration process
+            par = obj.parChain(:, obj.iter) - obj.step * obj.grad;
+            % gather the delta values
+            G = par(1:obj.numGrad.G);
+            B = par(1+obj.numGrad.G:obj.numGrad.G+obj.numGrad.B);
+            Vm = par(1+obj.numGrad.G+obj.numGrad.B:obj.numGrad.G+obj.numGrad.B+obj.numGrad.Vm);
+            Va = par(1+obj.numGrad.G+obj.numGrad.B+obj.numGrad.Vm:end);
+            % we first do not assume any topologies, then we would add some
+            % topology iteration techiques.
+            obj.dataO.G = obj.colToMatDE(G, obj.numBus);
+            obj.dataO.B = obj.colToMatDE(B, obj.numBus);
+            obj.dataO.Vm(2:end, :) = reshape(Vm, obj.numBus-1, []); % exclude the source bus
+            obj.dataO.Va(2:end, :) = reshape(Va, obj.numBus-1, []); % exclude the source bus
         end
         
         function obj = identifyMCMCEIV(obj)
@@ -969,6 +1131,20 @@ classdef caseDistributionSystemMeasure < caseDistributionSystem
             end
         end
         
+        function h = matOfColDE(H)
+            % This method get the half triangle of a matrix The name DE
+            % denotes diagonal exclude, which means we consider the
+            % diagonal elements as the negative summation of the rest elements.
+%             H_up = tril(H, 1)';
+            n = size(H, 1);
+            N = (n - 1) * n / 2;
+            h = zeros(N, 1);
+            pt = 1;
+            for i = 1:n
+                h(pt:pt+n-i-1) = H(i, i+1:end);
+                pt = pt+n-i;
+            end
+        end
     end
 end
 

@@ -660,7 +660,7 @@ classdef caseDistributionSystem < handle
             pt = 1;
             for i = 1:n
                 h(pt:pt+n-i-1) = H_up(i, i+1:end);
-                pt = pt+n-i+1;
+                pt = pt+n-i;
             end
         end
         
@@ -690,6 +690,11 @@ classdef caseDistributionSystem < handle
                 pt = pt+n-i+1;
             end
             H = H + triu(H, 1)';
+        end
+        
+        function H = colToMatDE(h, n)
+            % This method transform the column of half triangle to a
+            % symmetric matrix
         end
     end
 end
