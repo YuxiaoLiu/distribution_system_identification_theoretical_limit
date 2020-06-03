@@ -846,8 +846,8 @@ classdef caseDistributionSystemMeasure < caseDistributionSystem
             wl.total = sqrt(obj.loss.P) + sqrt(obj.loss.Q) + sqrt(obj.loss.Vm) + sqrt(obj.loss.Va);
             wl.P = sqrt(obj.loss.P) / wl.total;
             wl.Q = sqrt(obj.loss.Q) / wl.total;
-            wl.Vm = sqrt(obj.loss.Vm) * obj.numBus / wl.total; % one P measurements related to multiple Vm and Va, we should correct this.
-            wl.Va = sqrt(obj.loss.Va) * obj.numBus / wl.total;
+            wl.Vm = sqrt(obj.loss.Vm) / wl.total; % one P measurements related to multiple Vm and Va, we should correct this.  * 2 * obj.numBus
+            wl.Va = sqrt(obj.loss.Va) / wl.total; % * 2 * obj.numBus 
             % The conditional weights
             wl.GP = wl.P / (wl.P + wl.Q + 1e-9);
             wl.GQ = wl.Q / (wl.P + wl.Q + 1e-9);
