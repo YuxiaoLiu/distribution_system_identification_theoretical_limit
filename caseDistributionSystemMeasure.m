@@ -30,6 +30,7 @@ classdef caseDistributionSystemMeasure < caseDistributionSystem
         maxIter             % the maximum iteration in the gradient-based methods
         step                % the step length of the iterations
         iter                % the current iteration step
+        updateVmVaFreq      % the frequency to update Vm and Va
     end
     
     methods
@@ -567,8 +568,9 @@ classdef caseDistributionSystemMeasure < caseDistributionSystem
             % Hopefully we could implement some power system domain
             % knowledge into the process because we know the ground truth
             % value.
-            obj.maxIter = 1000;
-            obj.step = 0.2;
+            obj.maxIter = 1200;
+            obj.step = 0.5;
+            obj.updateVmVaFreq = 16;
             
             % we first initialize data
             obj.dataO.G = obj.dataE.G;
@@ -590,7 +592,8 @@ classdef caseDistributionSystemMeasure < caseDistributionSystem
             obj.lossChain = zeros(5, obj.maxIter);
             obj.parChain = zeros(obj.numGrad.Sum, obj.maxIter);
             
-            while (obj.iter <= obj.maxIter)
+            isConverge = false;
+            while (obj.iter <= obj.maxIter && ~isConverge)
                 % collect the paramter vector
                 obj = collectPar(obj);
                 % build the gradient
@@ -603,9 +606,20 @@ classdef caseDistributionSystemMeasure < caseDistributionSystem
                 % update the parameters
                 obj = updatePar(obj);
                 % if converge
+                if obj.iter > 10
+                    if (obj.lossChain(1, obj.iter) - obj.lossChain(1, obj.iter-1) > 0)
+                        obj.updateVmVaFreq = ceil(obj.updateVmVaFreq / 2);
+                    end
+%                     if (obj.lossChain(1, obj.iter) - obj.lossChain(1, obj.iter-1) > 0 &&...
+%                         obj.lossChain(1, obj.iter-1) - obj.lossChain(1, obj.iter-2) > 0 &&...
+%                         obj.lossChain(1, obj.iter-2) - obj.lossChain(1, obj.iter-3) > 0 &&...
+%                         obj.lossChain(1, obj.iter-3) - obj.lossChain(1, obj.iter-4) > 0)
+                    if (mean(obj.lossChain(1, obj.iter-9:obj.iter-5)) < mean(obj.lossChain(1, obj.iter-4:obj.iter)))
+%                         isConverge = true;
+                    end
+                end
                 obj.iter = obj.iter + 1;
             end
-            
         end
         
         function obj = buildGradient(obj)
@@ -832,8 +846,8 @@ classdef caseDistributionSystemMeasure < caseDistributionSystem
             wl.total = sqrt(obj.loss.P) + sqrt(obj.loss.Q) + sqrt(obj.loss.Vm) + sqrt(obj.loss.Va);
             wl.P = sqrt(obj.loss.P) / wl.total;
             wl.Q = sqrt(obj.loss.Q) / wl.total;
-            wl.Vm = sqrt(obj.loss.Vm) / wl.total;
-            wl.Va = sqrt(obj.loss.Va) / wl.total;
+            wl.Vm = sqrt(obj.loss.Vm) * obj.numBus / wl.total; % one P measurements related to multiple Vm and Va, we should correct this.
+            wl.Va = sqrt(obj.loss.Va) * obj.numBus / wl.total;
             % The conditional weights
             wl.GP = wl.P / (wl.P + wl.Q + 1e-9);
             wl.GQ = wl.Q / (wl.P + wl.Q + 1e-9);
@@ -907,32 +921,40 @@ classdef caseDistributionSystemMeasure < caseDistributionSystem
             par(1:obj.numGrad.G) = obj.matOfColDE(obj.dataO.G);
             par(1+obj.numGrad.G:obj.numGrad.G+obj.numGrad.B) = obj.matOfColDE(obj.dataO.B);
             par(1+obj.numGrad.G+obj.numGrad.B:obj.numGrad.G+obj.numGrad.B+obj.numGrad.Vm) = ...
-                reshape(obj.dataO.Vm(2:end,:), [], 1); % we assume the value of the source bus is already known
+                reshape(obj.dataO.Vm(2:end,:)', [], 1); % we assume the value of the source bus is already known
             par(1+obj.numGrad.G+obj.numGrad.B+obj.numGrad.Vm:end) = ...
-                reshape(obj.dataO.Va(2:end,:), [], 1);
+                reshape(obj.dataO.Va(2:end,:)', [], 1);
             obj.parChain(:, obj.iter) = par;
         end
         
         function obj = updatePar(obj)
             % This method updates the parameters in the iteration process
             par = obj.parChain(:, obj.iter) - obj.step * obj.grad;
-            % gather the delta values
+            % gather the par values
             G = par(1:obj.numGrad.G);
             B = par(1+obj.numGrad.G:obj.numGrad.G+obj.numGrad.B);
-            Vm = par(1+obj.numGrad.G+obj.numGrad.B:obj.numGrad.G+obj.numGrad.B+obj.numGrad.Vm);
-            Va = par(1+obj.numGrad.G+obj.numGrad.B+obj.numGrad.Vm:end);
+            G(G>0) = 0;
+            B(B<0) = 0;
+            G(B==0) = 0;
+            B(G==0) = 0;
             % we first do not assume any topologies, then we would add some
             % topology iteration techiques.
             obj.dataO.G = obj.colToMatDE(G, obj.numBus);
             obj.dataO.B = obj.colToMatDE(B, obj.numBus);
-            obj.dataO.Vm(2:end, :) = reshape(Vm, obj.numBus-1, []); % exclude the source bus
-            obj.dataO.Va(2:end, :) = reshape(Va, obj.numBus-1, []); % exclude the source bus
+%             if mod(obj.iter, obj.updateVmVaFreq) == 0 
+                Vm = par(1+obj.numGrad.G+obj.numGrad.B:obj.numGrad.G+obj.numGrad.B+obj.numGrad.Vm);
+                Va = par(1+obj.numGrad.G+obj.numGrad.B+obj.numGrad.Vm:end);
+                obj.dataO.Vm(2:end, :) = reshape(Vm, [], obj.numBus-1)'; % exclude the source bus
+                obj.dataO.Va(2:end, :) = reshape(Va, [], obj.numBus-1)'; % exclude the source bus
+%             end
         end
         
         function obj = identifyMCMCEIV(obj)
             % This method uses the Markov Chain Monte Carlo to sample the
             % distribution of the parameters and the topologies. We use the
             % error-in-variables(EIV) assumption.
+            % We may have some errors regarding to the usage of reshape Vm
+            % and Va
             
             % Build the measurement function.
             % Currently, we assume we know all the P, Q, Vm, Va
@@ -948,8 +970,8 @@ classdef caseDistributionSystemMeasure < caseDistributionSystem
             % build the parameters
             G = obj.matOfCol(obj.dataE.G);
             B = obj.matOfCol(obj.dataE.B);
-            Vm = reshape(obj.data.Vm_noised(2:end,:), [], 1); % we assume the value of the source bus is already known
-            Va = reshape(obj.data.Va_noised(2:end,:), [], 1);
+            Vm = reshape(obj.data.Vm_noised(2:end,:)', [], 1); % we assume the value of the source bus is already known
+            Va = reshape(obj.data.Va_noised(2:end,:)', [], 1);
             par = [G' B' Vm' Va'];
             assert (length(par) == obj.numFIM.Sum) % the number of total parameters
             
