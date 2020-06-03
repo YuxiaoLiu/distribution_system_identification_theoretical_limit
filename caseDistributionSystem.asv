@@ -660,7 +660,7 @@ classdef caseDistributionSystem < handle
             pt = 1;
             for i = 1:n
                 h(pt:pt+n-i-1) = H_up(i, i+1:end);
-                pt = pt+n-i;
+                pt = pt+n-i+1;
             end
         end
         
