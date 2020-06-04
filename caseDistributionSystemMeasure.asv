@@ -29,8 +29,11 @@ classdef caseDistributionSystemMeasure < caseDistributionSystem
         
         maxIter             % the maximum iteration in the gradient-based methods
         step                % the step length of the iterations
+        stepMin             % the minimum step length
         iter                % the current iteration step
-        updateVmVaFreq      % the frequency to update Vm and Va
+        updateStepFreq      % the frequency to update the step length
+        momentRatio         % the part we maintain from the past gradient
+        vmvaWeight          % the additional weight to the vm and va
     end
     
     methods
@@ -568,9 +571,12 @@ classdef caseDistributionSystemMeasure < caseDistributionSystem
             % Hopefully we could implement some power system domain
             % knowledge into the process because we know the ground truth
             % value.
-            obj.maxIter = 5000;
-            obj.step = 0.5;
-            obj.updateVmVaFreq = 16;
+            obj.maxIter = 2000;
+            obj.step = 5;
+            obj.stepMin = 0.1;
+            obj.momentRatio = 0.9;
+            obj.updateStepFreq = 16;
+            obj.vmvaWeight = 4;
             
             % we first initialize data
             obj.dataO.G = obj.dataE.G;
@@ -601,22 +607,22 @@ classdef caseDistributionSystemMeasure < caseDistributionSystem
                 % implement the re-weight techique.
                 obj = tuneGradient(obj);
                 % update the chains
-                obj.gradChain(:, obj.iter) = obj.grad;
+                try
+                    obj.gradChain(:, obj.iter) = obj.grad * (1-obj.momentRatio) + obj.gradChain(:, obj.iter-1) * obj.momentRatio;
+                catch
+                    obj.gradChain(:, obj.iter) = obj.grad;
+                end
                 obj.lossChain(:, obj.iter) = [obj.loss.total; obj.loss.P; obj.loss.Q; obj.loss.Vm; obj.loss.Va];
                 % update the parameters
                 obj = updatePar(obj);
                 % if converge
-                if obj.iter > 10
-                    if (obj.lossChain(1, obj.iter) - obj.lossChain(1, obj.iter-1) > 0)
-                        obj.updateVmVaFreq = ceil(obj.updateVmVaFreq / 2);
+                if mod(obj.iter, obj.updateStepFreq) == 0 %obj.iter > 10
+                    if (mean(obj.lossChain(1, obj.iter-5:obj.iter-3)) < mean(obj.lossChain(1, obj.iter-2:obj.iter)))
+                        obj.step = max(obj.step / 2, obj.stepMin);
                     end
-%                     if (obj.lossChain(1, obj.iter) - obj.lossChain(1, obj.iter-1) > 0 &&...
-%                         obj.lossChain(1, obj.iter-1) - obj.lossChain(1, obj.iter-2) > 0 &&...
-%                         obj.lossChain(1, obj.iter-2) - obj.lossChain(1, obj.iter-3) > 0 &&...
-%                         obj.lossChain(1, obj.iter-3) - obj.lossChain(1, obj.iter-4) > 0)
-                    if (mean(obj.lossChain(1, obj.iter-9:obj.iter-5)) < mean(obj.lossChain(1, obj.iter-4:obj.iter)))
+%                     if (mean(obj.lossChain(1, obj.iter-9:obj.iter-5)) < mean(obj.lossChain(1, obj.iter-4:obj.iter)))
 %                         isConverge = true;
-                    end
+%                     end
                 end
                 obj.iter = obj.iter + 1;
             end
@@ -846,8 +852,8 @@ classdef caseDistributionSystemMeasure < caseDistributionSystem
             wl.total = sqrt(obj.loss.P) + sqrt(obj.loss.Q) + sqrt(obj.loss.Vm) + sqrt(obj.loss.Va);
             wl.P = sqrt(obj.loss.P) / wl.total;
             wl.Q = sqrt(obj.loss.Q) / wl.total;
-            wl.Vm = sqrt(obj.loss.Vm) * obj.numBus * 10 / wl.total; % one P measurements related to multiple Vm and Va, we should correct this.
-            wl.Va = sqrt(obj.loss.Va) * obj.numBus * 10 / wl.total;
+            wl.Vm = sqrt(obj.loss.Vm) * obj.vmvaWeight / wl.total; % one P measurements related to multiple Vm and Va, we should correct this.  * 2 * obj.numBus  
+            wl.Va = sqrt(obj.loss.Va) * obj.vmvaWeight / wl.total; % * 2 * obj.numBus; the number five is the average degree of a distribution network times two  * 5
             % The conditional weights
             wl.GP = wl.P / (wl.P + wl.Q + 1e-9);
             wl.GQ = wl.Q / (wl.P + wl.Q + 1e-9);
@@ -929,7 +935,8 @@ classdef caseDistributionSystemMeasure < caseDistributionSystem
         
         function obj = updatePar(obj)
             % This method updates the parameters in the iteration process
-            par = obj.parChain(:, obj.iter) - obj.step * obj.grad;
+            delta = obj.step * obj.gradChain(:, obj.iter);
+            par = obj.parChain(:, obj.iter) - delta;
             % gather the par values
             G = par(1:obj.numGrad.G);
             B = par(1+obj.numGrad.G:obj.numGrad.G+obj.numGrad.B);
@@ -939,13 +946,13 @@ classdef caseDistributionSystemMeasure < caseDistributionSystem
             B(G==0) = 0;
             % we first do not assume any topologies, then we would add some
             % topology iteration techiques.
-%             obj.dataO.G = obj.colToMatDE(G, obj.numBus);
-%             obj.dataO.B = obj.colToMatDE(B, obj.numBus);
+            obj.dataO.G = obj.colToMatDE(G, obj.numBus);
+            obj.dataO.B = obj.colToMatDE(B, obj.numBus);
 %             if mod(obj.iter, obj.updateVmVaFreq) == 0 
                 Vm = par(1+obj.numGrad.G+obj.numGrad.B:obj.numGrad.G+obj.numGrad.B+obj.numGrad.Vm);
                 Va = par(1+obj.numGrad.G+obj.numGrad.B+obj.numGrad.Vm:end);
-                obj.dataO.Vm(2:end, :) = reshape(Vm', obj.numBus-1, []); % exclude the source bus
-                obj.dataO.Va(2:end, :) = reshape(Va', obj.numBus-1, []); % exclude the source bus
+                obj.dataO.Vm(2:end, :) = reshape(Vm, [], obj.numBus-1)'; % exclude the source bus
+                obj.dataO.Va(2:end, :) = reshape(Va, [], obj.numBus-1)'; % exclude the source bus
 %             end
         end
         
@@ -953,6 +960,8 @@ classdef caseDistributionSystemMeasure < caseDistributionSystem
             % This method uses the Markov Chain Monte Carlo to sample the
             % distribution of the parameters and the topologies. We use the
             % error-in-variables(EIV) assumption.
+            % We may have some errors regarding to the usage of reshape Vm
+            % and Va
             
             % Build the measurement function.
             % Currently, we assume we know all the P, Q, Vm, Va

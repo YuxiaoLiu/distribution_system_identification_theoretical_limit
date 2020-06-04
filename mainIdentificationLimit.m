@@ -74,4 +74,4 @@ caseDS = caseDS.identifyOptGradient;
 % caseDS = caseDS.buildFIM(k);
 % caseDS = caseDS.updateTopo(topoTol, admittanceOnly);
 profile off;
-% profile viewer;
+profile viewer;
