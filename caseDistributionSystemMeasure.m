@@ -33,6 +33,7 @@ classdef caseDistributionSystemMeasure < caseDistributionSystem
         iter                % the current iteration step
         updateStepFreq      % the frequency to update the step length
         momentRatio         % the part we maintain from the past gradient
+        momentRatioMax      % the maximum momentRatio
         vmvaWeight          % the additional weight to the vm and va
     end
     
@@ -571,12 +572,13 @@ classdef caseDistributionSystemMeasure < caseDistributionSystem
             % Hopefully we could implement some power system domain
             % knowledge into the process because we know the ground truth
             % value.
-            obj.maxIter = 2000;
-            obj.step = 5;
-            obj.stepMin = 0.1;
+            obj.maxIter = 8000;
+            obj.step = 2;
+            obj.stepMin = 0.01;
             obj.momentRatio = 0.9;
-            obj.updateStepFreq = 16;
+            obj.updateStepFreq = 20;
             obj.vmvaWeight = 4;
+            obj.momentRatioMax = 0.95;
             
             % we first initialize data
             obj.dataO.G = obj.dataE.G;
@@ -617,9 +619,13 @@ classdef caseDistributionSystemMeasure < caseDistributionSystem
                 obj = updatePar(obj);
                 % if converge
                 if mod(obj.iter, obj.updateStepFreq) == 0 %obj.iter > 10
-                    if (mean(obj.lossChain(1, obj.iter-5:obj.iter-3)) < mean(obj.lossChain(1, obj.iter-2:obj.iter)))
+                    if (mean(obj.lossChain(1, obj.iter-9:obj.iter-5)) < mean(obj.lossChain(1, obj.iter-4:obj.iter)))
                         obj.step = max(obj.step / 2, obj.stepMin);
+                        obj.momentRatio = min(obj.momentRatio + 0.1, obj.momentRatioMax);
                     end
+%                     if (mean(obj.lossChain(1, obj.iter-9:obj.iter-5)) > mean(obj.lossChain(1, obj.iter-4:obj.iter)))
+%                         obj.step = min(obj.step * 2, obj.stepMax);
+%                     end
 %                     if (mean(obj.lossChain(1, obj.iter-9:obj.iter-5)) < mean(obj.lossChain(1, obj.iter-4:obj.iter)))
 %                         isConverge = true;
 %                     end
@@ -653,9 +659,9 @@ classdef caseDistributionSystemMeasure < caseDistributionSystem
                 % G_ij\sin(\Theta_ij)-B_ij\cos(\Theta_ij)
                 GBThetaQ = obj.dataO.G .* sin(Theta_ij) - obj.dataO.B .* cos(Theta_ij);
                 % P estimate
-                Pest = (GBThetaP * obj.data.Vm(:, i)) .* obj.data.Vm(:, i);
+                Pest = (GBThetaP * obj.dataO.Vm(:, i)) .* obj.dataO.Vm(:, i);
                 % Q estimate
-                Qest = (GBThetaQ * obj.data.Vm(:, i)) .* obj.data.Vm(:, i);
+                Qest = (GBThetaQ * obj.dataO.Vm(:, i)) .* obj.dataO.Vm(:, i);
                 
                 % calculate the sub-vector of P of all buses
                 for j = 1:obj.numBus
@@ -830,7 +836,90 @@ classdef caseDistributionSystemMeasure < caseDistributionSystem
         end
         
         function obj = tuneGradient(obj)
-            % This method tunes the gradient according to the weights
+            % This method tunes the gradient according to the weights. In
+            % this version we treat P and Q together.
+            
+            % The weight of the initial gradient
+            wg.P.G = mean(abs(obj.gradP(1:obj.numGrad.G)));
+            wg.P.B = mean(abs(obj.gradP(1+obj.numGrad.G:obj.numGrad.G+obj.numGrad.B)));
+            wg.P.Vm = mean(abs(obj.gradP(1+obj.numGrad.G+obj.numGrad.B:obj.numGrad.G+obj.numGrad.B+obj.numGrad.Vm)));
+            wg.P.Va = mean(abs(obj.gradP(1+obj.numGrad.G+obj.numGrad.B+obj.numGrad.Vm:end)));
+            wg.Q.G = mean(abs(obj.gradQ(1:obj.numGrad.G)));
+            wg.Q.B = mean(abs(obj.gradQ(1+obj.numGrad.G:obj.numGrad.G+obj.numGrad.B)));
+            wg.Q.Vm = mean(abs(obj.gradQ(1+obj.numGrad.G+obj.numGrad.B:obj.numGrad.G+obj.numGrad.B+obj.numGrad.Vm)));
+            wg.Q.Va = mean(abs(obj.gradQ(1+obj.numGrad.G+obj.numGrad.B+obj.numGrad.Vm:end)));
+            
+            wg.PQ_GB = mean([wg.P.G wg.P.B wg.Q.G  wg.Q.B]);
+            wg.PQ_Vm = mean([wg.P.Vm wg.Q.Vm]);
+            wg.PQ_Va = mean([wg.P.Va wg.Q.Va]);
+            wg.Vm_Vm = mean(abs(obj.gradVm(1+obj.numGrad.G+obj.numGrad.B:obj.numGrad.G+obj.numGrad.B+obj.numGrad.Vm)));
+            wg.Va_Va = mean(abs(obj.gradVa(1+obj.numGrad.G+obj.numGrad.B+obj.numGrad.Vm:end)));
+            
+            % The weight of the CRLB
+            wb.GB = mean(obj.boundA.total(1:obj.numFIM.G+obj.numFIM.B));
+            wb.Vm = mean(abs(obj.boundA.total(1+obj.numFIM.G+obj.numFIM.B:obj.numFIM.G+obj.numFIM.B+obj.numFIM.Vm)));
+            wb.Va = mean(abs(obj.boundA.total(1+obj.numFIM.G+obj.numFIM.B+obj.numFIM.Vm:end)));
+            % The weight of the loss function
+            wl.total = sqrt(obj.loss.P + obj.loss.Q) + sqrt(obj.loss.Vm) + sqrt(obj.loss.Va);
+            wl.PQ = sqrt(obj.loss.P + obj.loss.Q) / wl.total;
+            wl.Vm = sqrt(obj.loss.Vm) * obj.vmvaWeight / wl.total; % one P measurements related to multiple Vm and Va, we should correct this.  * 2 * obj.numBus  
+            wl.Va = sqrt(obj.loss.Va) * obj.vmvaWeight / wl.total; % * 2 * obj.numBus; the number five is the average degree of a distribution network times two  * 5
+            % The conditional weights
+            wl.Vm_PQ = wl.PQ / (wl.PQ + wl.Vm + 1e-9);
+            wl.Vm_Vm = wl.Vm / (wl.PQ + wl.Vm + 1e-9);
+            wl.Va_PQ = wl.PQ / (wl.PQ + wl.Va + 1e-9);
+            wl.Va_Va = wl.Va / (wl.PQ + wl.Va + 1e-9);
+            
+            % tune the gradient vector. 
+            % normalize the gradient weight by P Q Vm Va
+            obj.gradP(1:obj.numGrad.G+obj.numGrad.B) = ...
+                obj.gradP(1:obj.numGrad.G+obj.numGrad.B) / (wg.PQ_GB + 1e-9);
+            obj.gradP(1+obj.numGrad.G+obj.numGrad.B:obj.numGrad.G+obj.numGrad.B+obj.numGrad.Vm) = ...
+                obj.gradP(1+obj.numGrad.G+obj.numGrad.B:obj.numGrad.G+obj.numGrad.B+obj.numGrad.Vm) / (wg.PQ_Vm + 1e-9);
+            obj.gradP(1+obj.numGrad.G+obj.numGrad.B+obj.numGrad.Vm:end) = ...
+                obj.gradP(1+obj.numGrad.G+obj.numGrad.B+obj.numGrad.Vm:end) / (wg.PQ_Va + 1e-9);
+            
+            obj.gradQ(1:obj.numGrad.G+obj.numGrad.B) = ...
+                obj.gradQ(1:obj.numGrad.G+obj.numGrad.B) / (wg.PQ_GB + 1e-9);
+            obj.gradQ(1+obj.numGrad.G+obj.numGrad.B:obj.numGrad.G+obj.numGrad.B+obj.numGrad.Vm) = ...
+                obj.gradQ(1+obj.numGrad.G+obj.numGrad.B:obj.numGrad.G+obj.numGrad.B+obj.numGrad.Vm) / (wg.PQ_Vm + 1e-9);
+            obj.gradQ(1+obj.numGrad.G+obj.numGrad.B+obj.numGrad.Vm:end) = ...
+                obj.gradQ(1+obj.numGrad.G+obj.numGrad.B+obj.numGrad.Vm:end) / (wg.PQ_Va + 1e-9);
+            
+            obj.gradVm(1+obj.numGrad.G+obj.numGrad.B:obj.numGrad.G+obj.numGrad.B+obj.numGrad.Vm) = ...
+                obj.gradVm(1+obj.numGrad.G+obj.numGrad.B:obj.numGrad.G+obj.numGrad.B+obj.numGrad.Vm) / (wg.Vm_Vm + 1e-9);
+            obj.gradVa(1+obj.numGrad.G+obj.numGrad.B+obj.numGrad.Vm:end) = ...
+                obj.gradVa(1+obj.numGrad.G+obj.numGrad.B+obj.numGrad.Vm:end) / (wg.Va_Va + 1e-9);
+            
+            % we use the weight of the approximated CRLB and the weight
+            % from the loss function
+            
+            obj.gradP(1:obj.numGrad.G+obj.numGrad.B) = ...
+                obj.gradP(1:obj.numGrad.G+obj.numGrad.B) * wb.GB;
+            obj.gradP(1+obj.numGrad.G+obj.numGrad.B:obj.numGrad.G+obj.numGrad.B+obj.numGrad.Vm) = ...
+                obj.gradP(1+obj.numGrad.G+obj.numGrad.B:obj.numGrad.G+obj.numGrad.B+obj.numGrad.Vm) * wb.Vm * wl.Vm_PQ;
+            obj.gradP(1+obj.numGrad.G+obj.numGrad.B+obj.numGrad.Vm:end) = ...
+                obj.gradP(1+obj.numGrad.G+obj.numGrad.B+obj.numGrad.Vm:end) * wb.Va * wl.Va_PQ;
+            
+            obj.gradQ(1:obj.numGrad.G+obj.numGrad.B) = ...
+                obj.gradQ(1:obj.numGrad.G+obj.numGrad.B) * wb.GB;
+            obj.gradQ(1+obj.numGrad.G+obj.numGrad.B:obj.numGrad.G+obj.numGrad.B+obj.numGrad.Vm) = ...
+                obj.gradQ(1+obj.numGrad.G+obj.numGrad.B:obj.numGrad.G+obj.numGrad.B+obj.numGrad.Vm) * wb.Vm * wl.Vm_PQ;
+            obj.gradQ(1+obj.numGrad.G+obj.numGrad.B+obj.numGrad.Vm:end) = ...
+                obj.gradQ(1+obj.numGrad.G+obj.numGrad.B+obj.numGrad.Vm:end) * wb.Va * wl.Va_PQ;
+            
+            obj.gradVm(1+obj.numGrad.G+obj.numGrad.B:obj.numGrad.G+obj.numGrad.B+obj.numGrad.Vm) = ...
+                obj.gradVm(1+obj.numGrad.G+obj.numGrad.B:obj.numGrad.G+obj.numGrad.B+obj.numGrad.Vm) * wb.Vm * wl.Vm_Vm;
+            obj.gradVa(1+obj.numGrad.G+obj.numGrad.B+obj.numGrad.Vm:end) = ...
+                obj.gradVa(1+obj.numGrad.G+obj.numGrad.B+obj.numGrad.Vm:end) * wb.Va * wl.Va_Va;
+            
+            % collect the tuned gardient
+            obj.grad = obj.gradP + obj.gradQ + obj.gradVm + obj.gradVa;
+        end
+        
+        function obj = tuneGradientPQ(obj)
+            % This method tunes the gradient according to the weights. In
+            % this version we treat P and Q independently.
             
             % The weight of the initial gradient
             wg.P.G = mean(abs(obj.gradP(1:obj.numGrad.G)));
@@ -942,8 +1031,8 @@ classdef caseDistributionSystemMeasure < caseDistributionSystem
             B = par(1+obj.numGrad.G:obj.numGrad.G+obj.numGrad.B);
             G(G>0) = 0;
             B(B<0) = 0;
-            G(B==0) = 0;
-            B(G==0) = 0;
+%             G(B==0) = 0; % we do not use it because it will cause sudden change
+%             B(G==0) = 0;
             % we first do not assume any topologies, then we would add some
             % topology iteration techiques.
             obj.dataO.G = obj.colToMatDE(G, obj.numBus);
