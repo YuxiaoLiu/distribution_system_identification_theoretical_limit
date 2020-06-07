@@ -5,7 +5,7 @@
 clear;clc;
 warning off
 caseName = 'case33bw';     % the case name    'case3_dist' 'case33bw'
-numSnap = 100;             % the number of snapshot
+numSnap = 120;             % the number of snapshot
 range.P = 1.2;               % the deviation range of active load 0.6
 range.Q = 0.3;             % the deviation range of reactive load to active load 0.2
 

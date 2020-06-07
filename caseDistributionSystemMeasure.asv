@@ -30,10 +30,13 @@ classdef caseDistributionSystemMeasure < caseDistributionSystem
         maxIter             % the maximum iteration in the gradient-based methods
         step                % the step length of the iterations
         stepMin             % the minimum step length
+        stepMax             % the maximum step length
+        stepChain           % the chain of the step length
         iter                % the current iteration step
         updateStepFreq      % the frequency to update the step length
         momentRatio         % the part we maintain from the past gradient
         momentRatioMax      % the maximum momentRatio
+        momentRatioMin      % the minimum momentRatio
         vmvaWeight          % the additional weight to the vm and va
     end
     
@@ -572,13 +575,15 @@ classdef caseDistributionSystemMeasure < caseDistributionSystem
             % Hopefully we could implement some power system domain
             % knowledge into the process because we know the ground truth
             % value.
-            obj.maxIter = 1000;
+            obj.maxIter = 3000;
             obj.step = 2;
-            obj.stepMin = 0.0001;
+            obj.stepMax = 2;
+            obj.stepMin = 0.01;
             obj.momentRatio = 0.9;
-            obj.updateStepFreq = 16;
+            obj.updateStepFreq = 20;
             obj.vmvaWeight = 4;
-            obj.momentRatioMax = 0.96;
+            obj.momentRatioMax = 0.95;
+            obj.momentRatioMin = 0.9;
             
             % we first initialize data
             obj.dataO.G = obj.dataE.G;
@@ -599,6 +604,7 @@ classdef caseDistributionSystemMeasure < caseDistributionSystem
             obj.gradChain = zeros(obj.numGrad.Sum, obj.maxIter);
             obj.lossChain = zeros(5, obj.maxIter);
             obj.parChain = zeros(obj.numGrad.Sum, obj.maxIter);
+            obj.stepChain = zeros(1, obj.maxIter);
             
             isConverge = false;
             while (obj.iter <= obj.maxIter && ~isConverge)
@@ -619,17 +625,29 @@ classdef caseDistributionSystemMeasure < caseDistributionSystem
                 obj = updatePar(obj);
                 % if converge
                 if mod(obj.iter, obj.updateStepFreq) == 0 %obj.iter > 10
-                    if (mean(obj.lossChain(1, obj.iter-5:obj.iter-3)) < mean(obj.lossChain(1, obj.iter-2:obj.iter)))
+                    if (mean(obj.lossChain(1, obj.iter-9:obj.iter-5)) < mean(obj.lossChain(1, obj.iter-4:obj.iter)))
                         obj.step = max(obj.step / 2, obj.stepMin);
                         obj.momentRatio = min(obj.momentRatio + 0.1, obj.momentRatioMax);
+                    elseif (((obj.lossChain(1, obj.iter) - obj.lossChain(1, obj.iter-1)) *...
+                        (obj.lossChain(1, obj.iter-1) - obj.lossChain(1, obj.iter-2)) < 0)...
+                        && ((obj.lossChain(1, obj.iter-7) - obj.lossChain(1, obj.iter-8)) *...
+                        (obj.lossChain(1, obj.iter-8) - obj.lossChain(1, obj.iter-9)) < 0))
+                        obj.step = max(obj.step / 2, obj.stepMin);
+                        obj.momentRatio = min(obj.momentRatio + 0.1, obj.momentRatioMax);
+                    elseif (((obj.lossChain(1, obj.iter) - obj.lossChain(1, obj.iter-1)) < 0) ...
+                        && ((obj.lossChain(1, obj.iter-1) - obj.lossChain(1, obj.iter-2)) < 0))...
+                        && ((obj.lossChain(1, obj.iter-2) - obj.lossChain(1, obj.iter-3)) < 0))...
+                        && ((obj.lossChain(1, obj.iter-3) - obj.lossChain(1, obj.iter-4)) < 0)))
+                    
+                    elseif (mean(obj.lossChain(1, obj.iter-9:obj.iter-5)) / mean(obj.lossChain(1, obj.iter-4:obj.iter)) > 1.001)
+                        obj.step = min(obj.step * 1.2, obj.stepMax);
+                        obj.momentRatio = max(obj.momentRatio - 0.1, obj.momentRatioMin);
                     end
-%                     if (mean(obj.lossChain(1, obj.iter-9:obj.iter-5)) > mean(obj.lossChain(1, obj.iter-4:obj.iter)))
-%                         obj.step = min(obj.step * 2, obj.stepMax);
-%                     end
 %                     if (mean(obj.lossChain(1, obj.iter-9:obj.iter-5)) < mean(obj.lossChain(1, obj.iter-4:obj.iter)))
 %                         isConverge = true;
 %                     end
                 end
+                obj.stepChain(obj.iter) = obj.step;
                 obj.iter = obj.iter + 1;
             end
         end
@@ -1031,8 +1049,8 @@ classdef caseDistributionSystemMeasure < caseDistributionSystem
             B = par(1+obj.numGrad.G:obj.numGrad.G+obj.numGrad.B);
             G(G>0) = 0;
             B(B<0) = 0;
-            G(B==0) = 0; % we do not use it because it will cause sudden change
-            B(G==0) = 0;
+%             G(B==0) = 0; % we do not use it because it will cause sudden change
+%             B(G==0) = 0;
             % we first do not assume any topologies, then we would add some
             % topology iteration techiques.
             obj.dataO.G = obj.colToMatDE(G, obj.numBus);
