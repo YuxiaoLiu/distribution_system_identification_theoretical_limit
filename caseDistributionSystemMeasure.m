@@ -598,24 +598,24 @@ classdef caseDistributionSystemMeasure < caseDistributionSystem
             % Hopefully we could implement some power system domain
             % knowledge into the process because we know the ground truth
             % value.
-            obj.maxIter = 2000;
-            obj.step = 0.5;
+            obj.maxIter = 30000;
+            obj.step = 1;
             obj.stepMax = 2;
             obj.stepMin = 0.01;
             obj.momentRatio = 0.9;
             obj.updateStepFreq = 20;
-            obj.vmvaWeight = 4;
+            obj.vmvaWeight = 1;
             obj.momentRatioMax = 0.95;
             obj.momentRatioMin = 0.9;
             obj.kZero = 0.0005;
             
             % we first initialize data
-            obj.dataO.G = obj.data.G;
-            obj.dataO.B = obj.data.B;
+            obj.dataO.G = obj.dataE.G;
+            obj.dataO.B = obj.dataE.B;
             % note that we should replace the Vm ro Va data to some
             % initialized data if we do not have the measurement devices
-            obj.dataO.Vm = obj.data.Vm_noised;
-            obj.dataO.Va = obj.data.Va_noised;
+            obj.dataO.Vm = obj.data.Vm;
+            obj.dataO.Va = obj.data.Va;
             
             % begin the iteration loop
             % initialize the gradient numbers
@@ -780,6 +780,7 @@ classdef caseDistributionSystemMeasure < caseDistributionSystem
             h_Va = obj.dataO.Vm(bus, snap) * obj.dataO.Vm(:, snap) .* GBThetaQ(:, bus);
             h_Va(bus) = h_Va(bus)-sum(obj.dataO.Vm(bus, snap) * obj.dataO.Vm(:, snap) .* GBThetaQ(:, bus));
             H_Va(:, snap) = h_Va;
+            assert (H_Va(bus, snap) > 0)
             % remove the source bus whose magnitude is not the state variable
             H_Va(1, :) = []; 
             h_VaLarge = reshape(H_Va', [], 1);
@@ -1078,27 +1079,27 @@ classdef caseDistributionSystemMeasure < caseDistributionSystem
 %             B(G==0) = 0;
             % we first do not assume any topologies, then we would add some
             % topology iteration techiques.
-%             obj.dataO.G = obj.colToMatDE(G, obj.numBus);
-%             obj.dataO.B = obj.colToMatDE(B, obj.numBus);
+            obj.dataO.G = obj.colToMatDE(G, obj.numBus);
+            obj.dataO.B = obj.colToMatDE(B, obj.numBus);
 %             if mod(obj.iter, obj.updateVmVaFreq) == 0 
-                Vm = par(1+obj.numGrad.G+obj.numGrad.B:obj.numGrad.G+obj.numGrad.B+obj.numGrad.Vm);
-                Va = par(1+obj.numGrad.G+obj.numGrad.B+obj.numGrad.Vm:end);
-                obj.dataO.Vm(2:end, :) = reshape(Vm, [], obj.numBus-1)'; % exclude the source bus
-                obj.dataO.Va(2:end, :) = reshape(Va, [], obj.numBus-1)'; % exclude the source bus
+            Vm = par(1+obj.numGrad.G+obj.numGrad.B:obj.numGrad.G+obj.numGrad.B+obj.numGrad.Vm);
+            Va = par(1+obj.numGrad.G+obj.numGrad.B+obj.numGrad.Vm:end);
+            obj.dataO.Vm(2:end, :) = reshape(Vm, [], obj.numBus-1)'; % exclude the source bus
+            obj.dataO.Va(2:end, :) = reshape(Va, [], obj.numBus-1)'; % exclude the source bus
 %             end
         end
         
         function obj = identifyOptNewton(obj)
             % This method uses Newton method to update the parameters
-            obj.maxIter = 100;
+            obj.maxIter = 10;
             
             % we first initialize data
-            obj.dataO.G = obj.dataE.G;
-            obj.dataO.B = obj.dataE.B;
+            obj.dataO.G = obj.data.G;
+            obj.dataO.B = obj.data.B;
             % note that we should replace the Vm ro Va data to some
             % initialized data if we do not have the measurement devices
             obj.dataO.Vm = obj.data.Vm_noised;
-            obj.dataO.Va = obj.data.Va_noised;
+            obj.dataO.Va = zeros(size(obj.data.Va_noised));
             
             % begin the iteration loop
             % initialize the gradient numbers
@@ -1129,16 +1130,20 @@ classdef caseDistributionSystemMeasure < caseDistributionSystem
         function obj = updateParNewton(obj)
             % This method updates the parameters using Newton kings of
             % strategies
-            delta = obj.H \ obj.grad;
-            par = obj.parChain(:, obj.iter) - delta;
+%             delta = obj.H \ obj.grad;
+%             par = obj.parChain(:, obj.iter) - delta;
+            
+            delta = obj.H(1+obj.numGrad.B+obj.numGrad.G:end,1+obj.numGrad.B+obj.numGrad.G:end) \ obj.grad(1+obj.numGrad.B+obj.numGrad.G:end);
+            par = zeros(obj.numGrad.Sum, 1);
+            par(1+obj.numGrad.B+obj.numGrad.G:end) = obj.parChain(1+obj.numGrad.B+obj.numGrad.G:end, obj.iter) - delta;
             % gather the par values
             G = par(1:obj.numGrad.G);
             B = par(1+obj.numGrad.G:obj.numGrad.G+obj.numGrad.B);
             G(G>0) = 0;
             B(B<0) = 0;
             
-            obj.dataO.G = obj.colToMatDE(G, obj.numBus);
-            obj.dataO.B = obj.colToMatDE(B, obj.numBus);
+%             obj.dataO.G = obj.colToMatDE(G, obj.numBus);
+%             obj.dataO.B = obj.colToMatDE(B, obj.numBus);
             Vm = par(1+obj.numGrad.G+obj.numGrad.B:obj.numGrad.G+obj.numGrad.B+obj.numGrad.Vm);
             Va = par(1+obj.numGrad.G+obj.numGrad.B+obj.numGrad.Vm:end);
             obj.dataO.Vm(2:end, :) = reshape(Vm, [], obj.numBus-1)'; % exclude the source bus
@@ -1199,11 +1204,11 @@ classdef caseDistributionSystemMeasure < caseDistributionSystem
                 end
                 
                 % calculate the sub-matrix of Va of all buses
-                for j = 1:obj.numBus
-                    if obj.isMeasure.Va(j)
-                        obj = buildHessianVa(obj, i, j);
-                    end
-                end
+%                 for j = 1:obj.numBus
+%                     if obj.isMeasure.Va(j)
+%                         obj = buildHessianVa(obj, i, j);
+%                     end
+%                 end
             end
             
             % collect the Hessians, gradients and the losses
