@@ -192,6 +192,9 @@ classdef caseDistributionSystem < handle
             obj.isMeasure.Va = true(obj.numBus, 1); % false
             obj.isMeasure.Vm(1) = false;
             obj.isMeasure.Va(1) = false;
+%             obj.isMeasure.Va(2:8) = true(7, 1);
+%             obj.isMeasure.Q(2:3) = false(2, 1);
+%             obj.isMeasure.P(6:7) = false(2, 1);
             % Set the tolerance of the modified Cholesky decomposition
             if any(obj.isMeasure.Va) % we have the measurement of Va
                 obj.tol = 0.45;

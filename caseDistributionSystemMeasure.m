@@ -40,12 +40,15 @@ classdef caseDistributionSystemMeasure < caseDistributionSystem
         momentRatioMax      % the maximum momentRatio
         momentRatioMin      % the minimum momentRatio
         vmvaWeight          % the additional weight to the vm and va
+        isConverge          % if the iteration concerges
         
         H                   % the Hessian matrix
         HP                  % the P part
         HQ                  % the Q part
         HVm                 % the Vm part
         HVa                 % the Va part
+        
+        J                   % the Jacobian matrix
     end
     
     methods
@@ -778,7 +781,9 @@ classdef caseDistributionSystemMeasure < caseDistributionSystem
             % Va
             H_Va = zeros(obj.numBus, obj.numSnap);
             h_Va = obj.dataO.Vm(bus, snap) * obj.dataO.Vm(:, snap) .* GBThetaQ(:, bus);
-            h_Va(bus) = h_Va(bus)-sum(obj.dataO.Vm(bus, snap) * obj.dataO.Vm(:, snap) .* GBThetaQ(:, bus));
+            h_Va(bus) = - obj.dataO.Vm(bus, snap)^2 * obj.dataO.B(bus, bus)...
+                       - obj.data.Q_noised(bus, snap); 
+%             h_Va(bus) = h_Va(bus)-sum(GBThetaQ(bus, :) * obj.dataO.Vm(:, snap) * obj.dataO.Vm(bus, snap));
             H_Va(:, snap) = h_Va;
             assert (H_Va(bus, snap) > 0)
             % remove the source bus whose magnitude is not the state variable
@@ -831,7 +836,9 @@ classdef caseDistributionSystemMeasure < caseDistributionSystem
             % Va
             H_Va = zeros(obj.numBus, obj.numSnap);
             h_Va = - obj.dataO.Vm(bus, snap) * obj.dataO.Vm(:, snap) .* GBThetaP(:, bus);
-            h_Va(bus) = h_Va(bus)+sum(obj.dataO.Vm(bus, snap) * obj.dataO.Vm(:, snap) .* GBThetaP(:, bus));
+            h_Va(bus) = - obj.dataO.Vm(bus, snap)^2 * obj.dataO.G(bus, bus) ...
+                        + obj.data.P_noised(bus, snap);
+%             h_Va(bus) = h_Va(bus)+sum(GBThetaP(bus, :) * obj.dataO.Vm(:, snap) * obj.dataO.Vm(bus, snap));
             H_Va(:, snap) = h_Va;
             % remove the source bus whose magnitude is not the state variable
             H_Va(1, :) = []; 
@@ -1098,9 +1105,14 @@ classdef caseDistributionSystemMeasure < caseDistributionSystem
             obj.dataO.B = obj.dataE.B;
             % note that we should replace the Vm ro Va data to some
             % initialized data if we do not have the measurement devices
-            obj.dataO.Vm = obj.data.Vm_noised;
-            obj.dataO.Va = zeros(size(obj.data.Va_noised));
+            obj.dataO.Vm = obj.data.Vm;
+%             obj.dataO.Va = obj.data.Va;
+%             obj.dataO.Vm(2:end, :) = bsxfun(@times, obj.data.Vm_noised(2:end, :), obj.isMeasure.Vm(2:end));
+%             obj.dataO.Vm(obj.dataO.Vm == 0) = 1;
+            obj.dataO.Va = bsxfun(@times, obj.data.Va_noised, obj.isMeasure.Va);
             
+%             obj.dataO.P = obj.data.P_noised;
+%             obj.dataO.Q = obj.data.Q_noised;
             obj.dataO.P = obj.data.P_noised;
             obj.dataO.Q = obj.data.Q_noised;
             
@@ -1115,24 +1127,99 @@ classdef caseDistributionSystemMeasure < caseDistributionSystem
             obj.lossChain = zeros(5, obj.maxIter);
             obj.parChain = zeros(obj.numGrad.Sum, obj.maxIter);
             
-            isConverge = false;
-            while (obj.iter <= obj.maxIter && ~isConverge)
+            obj.isConverge = false;
+            while (obj.iter <= obj.maxIter && ~obj.isConverge)
+                % update Va by power flow calculation
+%                 obj = updateParPF(obj);
                 % collect the paramter vector
                 obj = collectPar(obj);
-                % update Va by power flow calculation
-                obj = updateParPF(obj);
+                % build the Jacobian
+                obj = buildJacobian(obj);
                 % build the Hessian
                 obj = buildHessian(obj);
                 obj.lossChain(:, obj.iter) = ...
                     [obj.loss.total; obj.loss.P; obj.loss.Q; ...
                     obj.loss.Vm; obj.loss.Va];
                 % update the parameters
-                if (mod(obj.iter, 2) == 0)
-                    obj = updateParNewtonGV(obj, true);
+                if (mod(obj.iter-1, 2) ~= 0)
+                    obj = updateParNewtonGV(obj, true); % update GB
                 else
-                    obj = updateParNewtonGV(obj, false);
+%                     obj = updateParNewtonGV(obj, false);
                 end
                 obj.iter = obj.iter + 1;
+            end
+        end
+        
+        function obj = buildJacobian(obj)
+            % This method build the Jacobian matrix
+            obj.J = zeros(2 * obj.numBus * obj.numSnap, obj.numGrad.G + obj.numGrad.B + obj.numGrad.Va);
+            numP = obj.numBus * obj.numSnap;
+            for snap = 1:obj.numSnap
+                % calculate some basic parameters at present state
+                Theta_ij = repmat(obj.dataO.Va(:, snap), 1, obj.numBus) - repmat(obj.dataO.Va(:, snap)', obj.numBus, 1);
+                % G_ij\cos(\Theta_ij)+B_ij\sin(\Theta_ij)
+                GBThetaP = obj.dataO.G .* cos(Theta_ij) + obj.dataO.B .* sin(Theta_ij);
+                % G_ij\sin(\Theta_ij)-B_ij\cos(\Theta_ij)
+                GBThetaQ = obj.dataO.G .* sin(Theta_ij) - obj.dataO.B .* cos(Theta_ij);
+                for bus = 1:obj.numBus
+                    theta_ij = obj.dataO.Va(bus, snap) - obj.dataO.Va(:, snap);
+                    % P
+                    hP = zeros(obj.numGrad.G + obj.numGrad.B + obj.numGrad.Va, 1);
+                    % G matrix
+                    H_G = zeros(obj.numBus, obj.numBus);
+                    H_G(bus, :) = obj.dataO.Vm(bus, snap) * obj.dataO.Vm(:, snap)' .* cos(theta_ij');
+                    H_G(bus, :) = H_G(bus, :) - obj.dataO.Vm(bus, snap)^2; % the equivilance of diagonal elements
+                    h_G = obj.matToColDE(H_G);
+                    hP(1:obj.numGrad.G) = h_G;
+
+                    % B matrix
+                    H_B = zeros(obj.numBus, obj.numBus);
+                    H_B(bus, :) = obj.dataO.Vm(bus, snap) * obj.dataO.Vm(:, snap)' .* sin(theta_ij');
+                    h_B = obj.matToColDE(H_B);
+                    hP(obj.numGrad.G+1:obj.numGrad.G+obj.numGrad.B) = h_B;
+                    
+                    % Va
+                    H_Va = zeros(obj.numBus, obj.numSnap);
+                    h_Va = obj.dataO.Vm(bus, snap) * obj.dataO.Vm(:, snap) .* GBThetaQ(:, bus);
+                    h_Va(bus) = - obj.dataO.Vm(bus, snap)^2 * obj.dataO.B(bus, bus)...
+                       - obj.data.Q_noised(bus, snap); 
+%                     h_Va(bus) = h_Va(bus)-sum(GBThetaQ(bus, :) * obj.dataO.Vm(:, snap) * obj.dataO.Vm(bus, snap));
+                    H_Va(:, snap) = h_Va;
+                    % remove the source bus whose magnitude is not the state variable
+                    H_Va(1, :) = []; 
+                    h_VaLarge = reshape(H_Va', [], 1);
+                    hP(obj.numGrad.G+obj.numGrad.B+1:end) = h_VaLarge;
+                    
+                    % Q
+                    hQ = zeros(obj.numGrad.G + obj.numGrad.B + obj.numGrad.Va, 1);
+                    % G matrix
+                    H_G = zeros(obj.numBus, obj.numBus);
+                    H_G(bus, :) = obj.dataO.Vm(bus, snap) * obj.dataO.Vm(:, snap)' .* sin(theta_ij');
+                    h_G = obj.matToColDE(H_G);
+                    hQ(1:obj.numGrad.G) = h_G;
+
+                    % B matrix
+                    H_B = zeros(obj.numBus, obj.numBus);
+                    H_B(bus, :) = - obj.dataO.Vm(bus, snap) * obj.dataO.Vm(:, snap)' .* cos(theta_ij');
+                    H_B(bus, :) = H_B(bus, :) + obj.dataO.Vm(bus, snap)^2; % the equivilance of diagonal elements
+                    h_B = obj.matToColDE(H_B);
+                    hQ(obj.numGrad.G+1:obj.numGrad.G+obj.numGrad.B) = h_B;
+                    
+                    % Va
+                    H_Va = zeros(obj.numBus, obj.numSnap);
+                    h_Va = - obj.dataO.Vm(bus, snap) * obj.dataO.Vm(:, snap) .* GBThetaP(:, bus);
+                    h_Va(bus) = - obj.dataO.Vm(bus, snap)^2 * obj.dataO.G(bus, bus) ...
+                        + obj.data.P_noised(bus, snap);
+%                     h_Va(bus) = h_Va(bus)+sum(GBThetaP(bus, :) * obj.dataO.Vm(:, snap) * obj.dataO.Vm(bus, snap));
+                    H_Va(:, snap) = h_Va;
+                    % remove the source bus whose magnitude is not the state variable
+                    H_Va(1, :) = []; 
+                    h_VaLarge = reshape(H_Va', [], 1);
+                    hQ(obj.numGrad.G+obj.numGrad.B+1:end) = h_VaLarge;
+                    
+                    obj.J((snap-1)*obj.numBus+bus, :) = hP';
+                    obj.J((snap-1)*obj.numBus+bus+numP, :) = hQ';
+                end
             end
         end
         
@@ -1159,11 +1246,13 @@ classdef caseDistributionSystemMeasure < caseDistributionSystem
 %             Gtest = real(full(Y));
 %             Btest = imag(full(Y));
             mpcO.bus(mpcO.bus(:, 2) == 2, 2) = 1; % change all PV buses to PQ buses
+%             mpcO.bus(mpcO.bus(:, 2) == 1, 2) = 2; % change all PQ buses to PV buses
             mpopt = mpoption('verbose',0,'out.all',0);
             
             for snap = 1:obj.numSnap
                 mpcO.bus(2:end, 3) = - obj.dataO.P(2:end, snap) * mpcO.baseMVA;
                 mpcO.bus(2:end, 4) = - obj.dataO.Q(2:end, snap) * mpcO.baseMVA;
+                mpcO.bus(:, 8) = obj.dataO.Vm(:, snap);
                 mpcThis = runpf(mpcO, mpopt);
                 obj.dataO.Va(:, snap) = mpcThis.bus(:,9)/180*pi;
             end
@@ -1200,10 +1289,21 @@ classdef caseDistributionSystemMeasure < caseDistributionSystem
             % This method updates the parameters using Newton strategy by
             % iteratively updating GB and VmVa
             
-            if isGB % update GB value
-                delta = obj.H(1:obj.numGrad.B+obj.numGrad.G, 1:obj.numGrad.B+obj.numGrad.G) \ obj.grad(1:obj.numGrad.B+obj.numGrad.G);
+            if isGB % update GB value, and Va
+%                 delta = obj.H(1:obj.numGrad.B+obj.numGrad.G, 1:obj.numGrad.B+obj.numGrad.G) \ obj.grad(1:obj.numGrad.B+obj.numGrad.G);
+                deltaP = obj.dataO.P - obj.data.P_noised;
+                deltaQ = obj.dataO.Q - obj.data.Q_noised;
+                deltaPQ = [reshape(deltaP, [], 1);reshape(deltaQ, [], 1)];
+                delta = pinv(obj.J) * deltaPQ;
+                if (max(abs(delta)) < 1e-5)
+                    obj.isConverge = true;
+                end
                 par = zeros(obj.numGrad.Sum, 1);
-                par(1:obj.numGrad.B+obj.numGrad.G) = obj.parChain(1:obj.numGrad.B+obj.numGrad.G, obj.iter) - delta;
+                par(1:obj.numGrad.B+obj.numGrad.G) = ...
+                    obj.parChain(1:obj.numGrad.B+obj.numGrad.G, obj.iter) ...
+                    - delta(1:obj.numGrad.B+obj.numGrad.G);
+                par(obj.numGrad.B+obj.numGrad.G+obj.numGrad.Vm+1:end) = ...
+                    - delta(obj.numGrad.B+obj.numGrad.G+1:end);
                 
                 G = par(1:obj.numGrad.G);
                 B = par(1+obj.numGrad.G:obj.numGrad.G+obj.numGrad.B);
@@ -1211,15 +1311,36 @@ classdef caseDistributionSystemMeasure < caseDistributionSystem
                 B(B<0) = 0;
                 obj.dataO.G = obj.colToMatDE(G, obj.numBus);
                 obj.dataO.B = obj.colToMatDE(B, obj.numBus);
+                Va = par(1+obj.numGrad.G+obj.numGrad.B+obj.numGrad.Vm:end);
+                obj.dataO.Va(2:end, :) = reshape(Va, [], obj.numBus-1)'; % exclude the source bus
             else % update VmVa value
                 delta = obj.H(1+obj.numGrad.B+obj.numGrad.G:end,1+obj.numGrad.B+obj.numGrad.G:end) \ obj.grad(1+obj.numGrad.B+obj.numGrad.G:end);
+                if (max(abs(delta)) < 1e-9)
+                    obj.isConverge = true;
+                end
                 par = zeros(obj.numGrad.Sum, 1);
                 par(1+obj.numGrad.B+obj.numGrad.G:end) = obj.parChain(1+obj.numGrad.B+obj.numGrad.G:end, obj.iter) - delta;
                 Vm = par(1+obj.numGrad.G+obj.numGrad.B:obj.numGrad.G+obj.numGrad.B+obj.numGrad.Vm);
                 Va = par(1+obj.numGrad.G+obj.numGrad.B+obj.numGrad.Vm:end);
                 obj.dataO.Vm(2:end, :) = reshape(Vm, [], obj.numBus-1)'; % exclude the source bus
                 obj.dataO.Va(2:end, :) = reshape(Va, [], obj.numBus-1)'; % exclude the source bus
-            end      
+            end
+            
+            % update PQ
+            for i = 1:obj.numSnap
+                % calculate some basic parameters at present state
+                Theta_ij = repmat(obj.dataO.Va(:, i), 1, obj.numBus) - repmat(obj.dataO.Va(:, i)', obj.numBus, 1);
+                % G_ij\cos(\Theta_ij)+B_ij\sin(\Theta_ij)
+                GBThetaP = obj.dataO.G .* cos(Theta_ij) + obj.dataO.B .* sin(Theta_ij);
+                % G_ij\sin(\Theta_ij)-B_ij\cos(\Theta_ij)
+                GBThetaQ = obj.dataO.G .* sin(Theta_ij) - obj.dataO.B .* cos(Theta_ij);
+                % P estimate
+                Pest = (GBThetaP * obj.dataO.Vm(:, i)) .* obj.dataO.Vm(:, i);
+                obj.dataO.P(:, i) = Pest;
+                % Q estimate
+                Qest = (GBThetaQ * obj.dataO.Vm(:, i)) .* obj.dataO.Vm(:, i);
+                obj.dataO.Q(:, i) = Qest;
+            end
         end
         
         function obj = buildHessian(obj)
@@ -1278,11 +1399,11 @@ classdef caseDistributionSystemMeasure < caseDistributionSystem
                 end
                 
                 % calculate the sub-matrix of Va of all buses
-%                 for j = 1:obj.numBus
-%                     if obj.isMeasure.Va(j)
-%                         obj = buildHessianVa(obj, i, j);
-%                     end
-%                 end
+                for j = 1:obj.numBus
+                    if obj.isMeasure.Va(j)
+                        obj = buildHessianVa(obj, i, j);
+                    end
+                end
             end
             
             % collect the Hessians, gradients and the losses
@@ -1333,7 +1454,9 @@ classdef caseDistributionSystemMeasure < caseDistributionSystem
             % Va
             H_Va = zeros(obj.numBus, obj.numSnap);
             h_Va = obj.dataO.Vm(bus, snap) * obj.dataO.Vm(:, snap) .* GBThetaQ(:, bus);
-            h_Va(bus) = h_Va(bus)-sum(obj.dataO.Vm(bus, snap) * obj.dataO.Vm(:, snap) .* GBThetaQ(:, bus));
+            h_Va(bus) = - obj.dataO.Vm(bus, snap)^2 * obj.dataO.B(bus, bus)...
+                       - obj.data.Q_noised(bus, snap); 
+%             h_Va(bus) = h_Va(bus)-sum(GBThetaQ(bus, :) * obj.dataO.Vm(:, snap) * obj.dataO.Vm(bus, snap));
             H_Va(:, snap) = h_Va;
             % remove the source bus whose magnitude is not the state variable
             H_Va(1, :) = []; 
@@ -1387,7 +1510,9 @@ classdef caseDistributionSystemMeasure < caseDistributionSystem
             % Va
             H_Va = zeros(obj.numBus, obj.numSnap);
             h_Va = - obj.dataO.Vm(bus, snap) * obj.dataO.Vm(:, snap) .* GBThetaP(:, bus);
-            h_Va(bus) = h_Va(bus)+sum(obj.dataO.Vm(bus, snap) * obj.dataO.Vm(:, snap) .* GBThetaP(:, bus));
+            h_Va(bus) = - obj.dataO.Vm(bus, snap)^2 * obj.dataO.G(bus, bus) ...
+                        + obj.data.P_noised(bus, snap);
+%             h_Va(bus) = h_Va(bus)+sum(GBThetaP(bus, :) * obj.dataO.Vm(:, snap) * obj.dataO.Vm(bus, snap));
             H_Va(:, snap) = h_Va;
             % remove the source bus whose magnitude is not the state variable
             H_Va(1, :) = []; 
