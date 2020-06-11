@@ -1108,8 +1108,8 @@ classdef caseDistributionSystemMeasure < caseDistributionSystem
             obj.Tvec = logical(obj.matOfColDE(obj.Topo));
             
             % we first initialize data
-            obj.dataO.G = obj.dataE.G;
-            obj.dataO.B = obj.dataE.B;
+            obj.dataO.G = obj.data.G;
+            obj.dataO.B = obj.data.B;
             % note that we should replace the Vm ro Va data to some
             % initialized data if we do not have the measurement devices
             obj.dataO.Vm = obj.data.Vm;
@@ -1600,9 +1600,9 @@ classdef caseDistributionSystemMeasure < caseDistributionSystem
             % build HVa, GradientVa and lossVa
             lossThis = (obj.dataO.Va(bus, snap) - obj.data.Va_noised(bus, snap));
             obj.loss.Va = obj.loss.Va + lossThis^2 * obj.sigma.Va(bus).^(-2);
-            gradVaThis = obj.sigma.Va(bus).^(-2) * lossThis * g;
+            gradVaThis = obj.sigma.Vm(bus).^(-2) * lossThis * g;
             obj.gradVa = obj.gradVa + gradVaThis;
-            HVaThis = obj.sigma.Va(bus).^(-2) * (g * g');
+            HVaThis = obj.sigma.Vm(bus).^(-2) * (g * g');
             obj.HVa = obj.HVa + HVaThis;
         end
         

@@ -203,8 +203,10 @@ classdef caseDistributionSystem < handle
             end
             % We assume there is no noise in the source bus. We set the
             % enlarge ratio of each rows of measurement noise.
-            obj.sigma.P = max(abs(obj.data.P),[], 2) * ratio.P; %  mean(abs(obj.data.P), 2) * ratio.P;
-            obj.sigma.Q = max(abs(obj.data.Q),[], 2) * ratio.Q; % mean
+%             obj.sigma.P = max(abs(obj.data.P),[], 2) * ratio.P; %  mean(abs(obj.data.P), 2) * ratio.P;
+%             obj.sigma.Q = max(abs(obj.data.Q),[], 2) * ratio.Q; % mean
+            obj.sigma.P = mean(abs(obj.data.P), 2) * ratio.P; %  mean(abs(obj.data.P), 2) * ratio.P;
+            obj.sigma.Q = mean(abs(obj.data.Q), 2) * ratio.Q; % mean
             obj.sigma.P = max(obj.sigma.P, ratio.Pmin * obj.sigma.P(1));
             obj.sigma.Q = max(obj.sigma.Q, ratio.Qmin * obj.sigma.Q(1));
             obj.sigma.Vm = mean(abs(obj.data.Vm), 2) * ratio.Vm;
