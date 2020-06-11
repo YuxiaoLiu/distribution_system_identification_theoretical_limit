@@ -605,7 +605,7 @@ classdef caseDistributionSystemMeasure < caseDistributionSystem
             % Hopefully we could implement some power system domain
             % knowledge into the process because we know the ground truth
             % value.
-            obj.maxIter = 30000;
+            obj.maxIter = 2000;
             obj.step = 1;
             obj.stepMax = 2;
             obj.stepMin = 0.01;
@@ -622,7 +622,10 @@ classdef caseDistributionSystemMeasure < caseDistributionSystem
             % note that we should replace the Vm ro Va data to some
             % initialized data if we do not have the measurement devices
             obj.dataO.Vm = obj.data.Vm;
-            obj.dataO.Va = obj.data.Va;
+%             obj.dataO.Va = obj.data.Va;
+            obj.dataO.Vm(2:end, :) = bsxfun(@times, obj.data.Vm_noised(2:end, :), obj.isMeasure.Vm(2:end));
+            obj.dataO.Vm(obj.dataO.Vm == 0) = 1;
+            obj.dataO.Va = bsxfun(@times, obj.data.Va_noised, obj.isMeasure.Va);
             
             % begin the iteration loop
             % initialize the gradient numbers
@@ -637,14 +640,14 @@ classdef caseDistributionSystemMeasure < caseDistributionSystem
             obj.parChain = zeros(obj.numGrad.Sum, obj.maxIter);
             obj.stepChain = zeros(1, obj.maxIter);
             
-            isConverge = false;
-            while (obj.iter <= obj.maxIter && ~isConverge)
+            obj.isConverge = false;
+            while (obj.iter <= obj.maxIter && ~obj.isConverge)
                 % collect the paramter vector
                 obj = collectPar(obj);
                 % build the gradient
                 obj = buildGradient(obj);
                 % implement the re-weight techique.
-                obj = tuneGradientPQ(obj);
+                obj = tuneGradient(obj);
                 % update the chains
                 try
                     obj.gradChain(:, obj.iter) = obj.grad * (1-obj.momentRatio) + obj.gradChain(:, obj.iter-1) * obj.momentRatio;
@@ -789,7 +792,7 @@ classdef caseDistributionSystemMeasure < caseDistributionSystem
                        - obj.data.Q_noised(bus, snap); 
 %             h_Va(bus) = h_Va(bus)-sum(GBThetaQ(bus, :) * obj.dataO.Vm(:, snap) * obj.dataO.Vm(bus, snap));
             H_Va(:, snap) = h_Va;
-            assert (H_Va(bus, snap) > 0)
+%             assert (H_Va(bus, snap) > 0)
             % remove the source bus whose magnitude is not the state variable
             H_Va(1, :) = []; 
             h_VaLarge = reshape(H_Va', [], 1);
@@ -1086,8 +1089,8 @@ classdef caseDistributionSystemMeasure < caseDistributionSystem
             B = par(1+obj.numGrad.G:obj.numGrad.G+obj.numGrad.B);
             G(G>-obj.kZero) = 0;
             B(B<obj.kZero) = 0;
-%             G(B==0) = 0; % we do not use it because it will cause sudden change
-%             B(G==0) = 0;
+            G(B==0) = 0; % we do not use it because it will cause sudden change
+            B(G==0) = 0;
             % we first do not assume any topologies, then we would add some
             % topology iteration techiques.
             obj.dataO.G = obj.colToMatDE(G, obj.numBus);
@@ -1102,8 +1105,8 @@ classdef caseDistributionSystemMeasure < caseDistributionSystem
         
         function obj = identifyOptNewton(obj)
             % This method uses Newton method to update the parameters
-            obj.maxIter = 50;
-            obj.thsTopo = 0.005;
+            obj.maxIter = 500;
+            obj.thsTopo = 0.01;
             obj.Topo = true(obj.numBus, obj.numBus);
             obj.Tvec = logical(obj.matOfColDE(obj.Topo));
             
@@ -1300,6 +1303,18 @@ classdef caseDistributionSystemMeasure < caseDistributionSystem
             % iteratively updating GB and VmVa
             
             if obj.isGB % update GB value, and Va. We also update the topology
+                
+                % correct the topology
+                
+                diagEle = sum(abs(obj.dataO.G)) / 2;
+                ratio1 = abs(bsxfun(@rdivide, obj.dataO.G, diagEle));
+                ratio2 = abs(bsxfun(@rdivide, obj.dataO.G, diagEle'));
+                ratio = max(ratio1, ratio2);
+                obj.Topo = ratio > obj.thsTopo;
+                obj.Tvec = logical(obj.matOfColDE(obj.Topo));
+                obj.dataO.G(~obj.Topo) = 0;
+                obj.dataO.B(~obj.Topo) = 0;
+                
 %                 % update GB only
 %                 id = [obj.Tvec; obj.Tvec];
 %                 delta = zeros(obj.numGrad.G+obj.numGrad.B, 1);
@@ -1319,31 +1334,28 @@ classdef caseDistributionSystemMeasure < caseDistributionSystem
                 delta(id) = pinv(obj.J(:,id)) * deltaPQ;
                 
 %                 delta = pinv(obj.J) * deltaPQ;
-                if (max(abs(delta)) < 1e-5)
+                if (max(abs(delta)) < 1e-2)
                     obj.isGB = false;
                     obj.isConverge = obj.isConverge + 1;
                 else
                     obj.isConverge = 0;
                 end
-                par = zeros(obj.numGrad.Sum, 1);
-                par(1:obj.numGrad.B+obj.numGrad.G) = ...
-                    obj.parChain(1:obj.numGrad.B+obj.numGrad.G, obj.iter) ...
-                    - delta(1:obj.numGrad.B+obj.numGrad.G);
+%                 obj.isGB = false;
                 
+                par = zeros(obj.numGrad.Sum, 1);
+                id = [obj.Tvec; obj.Tvec];
+                par(id) = ...
+                    obj.parChain(id, obj.iter) ...
+                    - delta(id);
                 G = par(1:obj.numGrad.G);
                 B = par(1+obj.numGrad.G:obj.numGrad.G+obj.numGrad.B);
-                
-                % correct the topology
+                G(G>0) = -max(G)*rand()*0.2;
+                B(B<0) = max(B)*rand()*0.2;
+                G(G<-300) = -300;
+                B(B>300) = 300;
                 obj.dataO.G = obj.colToMatDE(G, obj.numBus);
                 obj.dataO.B = obj.colToMatDE(B, obj.numBus);
-                diagEle = sum(abs(obj.dataO.G)) / 2;
-                ratio = abs(bsxfun(@rdivide, obj.dataO.G, diagEle));
-                obj.Topo = ratio > obj.thsTopo;
-                obj.Tvec = logical(obj.matOfColDE(obj.Topo));
-                obj.dataO.G(~obj.Topo) = 0;
-                obj.dataO.B(~obj.Topo) = 0;
-%                 G(G>0) = 0;
-%                 B(B<0) = 0;
+
 
                 par(obj.numGrad.B+obj.numGrad.G+obj.numGrad.Vm+1:end) = ...
                     obj.parChain(obj.numGrad.B+obj.numGrad.G+obj.numGrad.Vm+1:end, obj.iter)...
@@ -1352,12 +1364,14 @@ classdef caseDistributionSystemMeasure < caseDistributionSystem
                 obj.dataO.Va(2:end, :) = reshape(Va, [], obj.numBus-1)'; % exclude the source bus
             else % update VmVa value
                 delta = obj.H(1+obj.numGrad.B+obj.numGrad.G:end,1+obj.numGrad.B+obj.numGrad.G:end) \ obj.grad(1+obj.numGrad.B+obj.numGrad.G:end);
-                if (max(abs(delta)) < 1e-9)
+                if (max(abs(delta)) < 1e-5)
                     obj.isGB = true;
                     obj.isConverge = obj.isConverge + 1;
                 else
                     obj.isConverge = 0;
                 end
+%                 obj.isGB = true;
+                
                 par = zeros(obj.numGrad.Sum, 1);
                 par(1+obj.numGrad.B+obj.numGrad.G:end) = obj.parChain(1+obj.numGrad.B+obj.numGrad.G:end, obj.iter) - delta;
                 Vm = par(1+obj.numGrad.G+obj.numGrad.B:obj.numGrad.G+obj.numGrad.B+obj.numGrad.Vm);
