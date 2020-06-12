@@ -53,6 +53,11 @@ classdef caseDistributionSystemMeasure < caseDistributionSystem
         Topo                % the topology matrix
         Tvec                % the topology vector
         thsTopo             % the threshold of Topology
+        
+        lambda              % the damping ratio of LM algorithm
+        maxLambda           % the maximum value
+        minLambda           % the minimum value
+        gradOrigin          % the original gradient in LM algorithm
     end
     
     methods
@@ -605,7 +610,7 @@ classdef caseDistributionSystemMeasure < caseDistributionSystem
             % Hopefully we could implement some power system domain
             % knowledge into the process because we know the ground truth
             % value.
-            obj.maxIter = 30000;
+            obj.maxIter = 2000;
             obj.step = 1;
             obj.stepMax = 2;
             obj.stepMin = 0.01;
@@ -622,7 +627,10 @@ classdef caseDistributionSystemMeasure < caseDistributionSystem
             % note that we should replace the Vm ro Va data to some
             % initialized data if we do not have the measurement devices
             obj.dataO.Vm = obj.data.Vm;
-            obj.dataO.Va = obj.data.Va;
+%             obj.dataO.Va = obj.data.Va;
+            obj.dataO.Vm(2:end, :) = bsxfun(@times, obj.data.Vm_noised(2:end, :), obj.isMeasure.Vm(2:end));
+            obj.dataO.Vm(obj.dataO.Vm == 0) = 1;
+            obj.dataO.Va = bsxfun(@times, obj.data.Va_noised, obj.isMeasure.Va);
             
             % begin the iteration loop
             % initialize the gradient numbers
@@ -637,14 +645,14 @@ classdef caseDistributionSystemMeasure < caseDistributionSystem
             obj.parChain = zeros(obj.numGrad.Sum, obj.maxIter);
             obj.stepChain = zeros(1, obj.maxIter);
             
-            isConverge = false;
-            while (obj.iter <= obj.maxIter && ~isConverge)
+            obj.isConverge = false;
+            while (obj.iter <= obj.maxIter && ~obj.isConverge)
                 % collect the paramter vector
                 obj = collectPar(obj);
                 % build the gradient
                 obj = buildGradient(obj);
                 % implement the re-weight techique.
-                obj = tuneGradientPQ(obj);
+                obj = tuneGradient(obj);
                 % update the chains
                 try
                     obj.gradChain(:, obj.iter) = obj.grad * (1-obj.momentRatio) + obj.gradChain(:, obj.iter-1) * obj.momentRatio;
@@ -789,7 +797,7 @@ classdef caseDistributionSystemMeasure < caseDistributionSystem
                        - obj.data.Q_noised(bus, snap); 
 %             h_Va(bus) = h_Va(bus)-sum(GBThetaQ(bus, :) * obj.dataO.Vm(:, snap) * obj.dataO.Vm(bus, snap));
             H_Va(:, snap) = h_Va;
-            assert (H_Va(bus, snap) > 0)
+%             assert (H_Va(bus, snap) > 0)
             % remove the source bus whose magnitude is not the state variable
             H_Va(1, :) = []; 
             h_VaLarge = reshape(H_Va', [], 1);
@@ -918,7 +926,7 @@ classdef caseDistributionSystemMeasure < caseDistributionSystem
             wl.total = sqrt(obj.loss.P + obj.loss.Q) + sqrt(obj.loss.Vm) + sqrt(obj.loss.Va);
             wl.PQ = sqrt(obj.loss.P + obj.loss.Q) / wl.total;
             wl.Vm = sqrt(obj.loss.Vm) * obj.vmvaWeight / wl.total; % one P measurements related to multiple Vm and Va, we should correct this.  * 2 * obj.numBus  
-            wl.Va = sqrt(obj.loss.Va) * obj.vmvaWeight * 2 / wl.total; % * 2 * obj.numBus; the number five is the average degree of a distribution network times two  * 5
+            wl.Va = sqrt(obj.loss.Va) * obj.vmvaWeight * 3 / wl.total; % * 2 * obj.numBus; the number five is the average degree of a distribution network times two  * 5
             % The conditional weights
             wl.Vm_PQ = wl.PQ / (wl.PQ + wl.Vm + 1e-9);
             wl.Vm_Vm = wl.Vm / (wl.PQ + wl.Vm + 1e-9);
@@ -1084,10 +1092,10 @@ classdef caseDistributionSystemMeasure < caseDistributionSystem
             % gather the par values
             G = par(1:obj.numGrad.G);
             B = par(1+obj.numGrad.G:obj.numGrad.G+obj.numGrad.B);
-            G(G>-obj.kZero) = 0;
-            B(B<obj.kZero) = 0;
+            G(G>0) = 0;
+%             B(B<0) = 0;
 %             G(B==0) = 0; % we do not use it because it will cause sudden change
-%             B(G==0) = 0;
+            B(G==0) = 0;
             % we first do not assume any topologies, then we would add some
             % topology iteration techiques.
             obj.dataO.G = obj.colToMatDE(G, obj.numBus);
@@ -1157,6 +1165,119 @@ classdef caseDistributionSystemMeasure < caseDistributionSystem
 %                     obj = updateParNewtonGV(obj, false);
 %                 end
                 obj.iter = obj.iter + 1;
+            end
+        end
+        
+        function obj = identifyOptLMPower(obj)
+            % This function identify the topology and the parameters using
+            % the LM-based strategy and the knowledge of power flow
+            % equations
+            obj.lambda = obj.numBus * obj.numSnap * 1e6;
+            obj.maxIter = 2000;
+            obj.thsTopo = 0.01;
+            obj.Topo = true(obj.numBus, obj.numBus);
+            obj.Tvec = logical(obj.matOfColDE(obj.Topo));
+            obj.vmvaWeight = 1;
+            obj.maxLambda = 1e8;
+            obj.minLambda = 1e4;
+            
+            % we first initialize the data
+            obj.dataO.G = obj.dataE.G;
+            obj.dataO.B = obj.dataE.B;
+            
+            obj.dataO.Vm = obj.data.Vm;
+%             obj.dataO.Va = obj.data.Va;
+            obj.dataO.Vm(2:end, :) = bsxfun(@times, obj.data.Vm_noised(2:end, :), obj.isMeasure.Vm(2:end));
+            obj.dataO.Vm(obj.dataO.Vm == 0) = 1;
+            obj.dataO.Va = bsxfun(@times, obj.data.Va_noised, obj.isMeasure.Va);
+            
+            obj.dataO.P = obj.data.P_noised;
+            obj.dataO.Q = obj.data.Q_noised;
+            
+            % initialize the gradient numbers
+            obj.numGrad.G = (obj.numBus - 1) * obj.numBus / 2; % exclude the diagonal elements
+            obj.numGrad.B = (obj.numBus - 1) * obj.numBus / 2;
+            obj.numGrad.Vm = obj.numSnap * (obj.numBus - 1); % exclude the source bus
+            obj.numGrad.Va = obj.numSnap * (obj.numBus - 1);
+            obj.numGrad.Sum = obj.numGrad.G + obj.numGrad.B + obj.numGrad.Vm + obj.numGrad.Va;
+            
+            % begin the iteration loop
+            obj.iter = 1;
+            obj.lossChain = zeros(5, obj.maxIter);
+            obj.parChain = zeros(obj.numGrad.Sum, obj.maxIter);
+            obj.isGB = false;
+            obj.isConverge = 0;
+            while (obj.iter <= obj.maxIter && obj.isConverge <= 2)
+                % collect the parameter vector
+                obj = collectPar(obj);
+                % build the Hessian
+                obj = buildHessian(obj);
+                obj.lossChain(:, obj.iter) = ...
+                    [obj.loss.total; obj.loss.P; obj.loss.Q; ...
+                    obj.loss.Vm; obj.loss.Va];
+                % implement the re-weight techique.
+                obj.gradOrigin = obj.grad;
+                obj = tuneGradient(obj);
+                % update the parameters
+                obj = updateParLMPower(obj);
+                obj.iter = obj.iter + 1;
+            end
+        end
+        
+        function obj = updateParLMPower(obj)
+            % This method updates the parameters using LM strategies and
+            % iteratively updates the GB and VmVa
+            % calculate the modified Hessian
+            H1 = obj.H + diag(obj.lambda * abs((obj.grad).^(-1)));
+            % we update all the parameters together
+            id = 1
+            if obj.isGB
+%                 delta = zeros(obj.numGrad.G+obj.numGrad.B, 1);
+%                 id = [obj.Tvec; obj.Tvec];
+                id = 1:obj.numGrad.G+obj.numGrad.B;
+                delta = H1(id, id) \ obj.gradOrigin(id);
+                % converge or not
+                if (max(abs(delta)) < 1e-5)
+                    obj.isConverge = obj.isConverge + 1;
+                else
+                    obj.isConverge = 0;
+                end
+                obj.isGB = false;
+                % update the parameters
+                par = zeros(obj.numGrad.Sum, 1);
+                par(id) = obj.parChain(id, obj.iter) - delta(id);
+                G = par(1:obj.numGrad.G);
+                B = par(1+obj.numGrad.G:obj.numGrad.G+obj.numGrad.B);
+                G(G>0) = 0;
+                B(B<0) = 0;
+                obj.dataO.G = obj.colToMatDE(G, obj.numBus);
+                obj.dataO.B = obj.colToMatDE(B, obj.numBus);
+            else
+                id = 1+obj.numGrad.B+obj.numGrad.G:obj.numGrad.Sum;
+                delta = H1(id, id) \ obj.gradOrigin(id);
+                % converge or not
+                if (max(abs(delta)) < 1e-9)
+                    obj.isConverge = obj.isConverge + 1;
+                else
+                    obj.isConverge = 0;
+                end
+                obj.isGB = true;
+                % update the paramters
+                par = zeros(obj.numGrad.Sum, 1);
+                par(id) = obj.parChain(id, obj.iter) - delta;
+                Vm = par(1+obj.numGrad.G+obj.numGrad.B:obj.numGrad.G+obj.numGrad.B+obj.numGrad.Vm);
+                Va = par(1+obj.numGrad.G+obj.numGrad.B+obj.numGrad.Vm:end);
+                obj.dataO.Vm(2:end, :) = reshape(Vm, [], obj.numBus-1)'; % exclude the source bus
+                obj.dataO.Va(2:end, :) = reshape(Va, [], obj.numBus-1)'; % exclude the source bus
+            end
+            % update the lambda
+            try
+                if obj.lossChain(1, obj.iter) < obj.lossChain(1, obj.iter-1)
+                    obj.lambda = max(obj.lambda, obj.minLambda);
+                else
+                    obj.lambda = min(obj.lambda * 3, obj.maxLambda);
+                end
+            catch
             end
         end
         
@@ -1346,10 +1467,10 @@ classdef caseDistributionSystemMeasure < caseDistributionSystem
                     - delta(id);
                 G = par(1:obj.numGrad.G);
                 B = par(1+obj.numGrad.G:obj.numGrad.G+obj.numGrad.B);
-%                 G(G>0) = -max(G)*rand()*0.2;
-%                 B(B<0) = max(B)*rand()*0.2;
-%                 G(G<-300) = -300;
-%                 B(B>300) = 300;
+                G(G>0) = -max(G)*rand()*0.2;
+                B(B<0) = max(B)*rand()*0.2;
+                G(G<-300) = -300;
+                B(B>300) = 300;
                 obj.dataO.G = obj.colToMatDE(G, obj.numBus);
                 obj.dataO.B = obj.colToMatDE(B, obj.numBus);
 
