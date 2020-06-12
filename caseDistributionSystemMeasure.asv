@@ -55,9 +55,11 @@ classdef caseDistributionSystemMeasure < caseDistributionSystem
         thsTopo             % the threshold of Topology
         
         lambda              % the damping ratio of LM algorithm
-        maxLambda           % the maximum value
-        minLambda           % the minimum value
+        lambdaMax           % the maximum value
+        lambdaMin           % the minimum value
+        lambdaChain         % the chain of lambda ratio, the first order ratio
         gradOrigin          % the original gradient in LM algorithm
+        gradPast            % the gradient of the last step
     end
     
     methods
@@ -617,7 +619,7 @@ classdef caseDistributionSystemMeasure < caseDistributionSystem
             obj.momentRatio = 0.9;
             obj.updateStepFreq = 20;
             obj.vmvaWeight = 1;
-            obj.momentRatioMax = 0.95;
+            obj.momentRatioMax = 0.9;
             obj.momentRatioMin = 0.9;
             obj.kZero = 0.0005;
             
@@ -673,9 +675,6 @@ classdef caseDistributionSystemMeasure < caseDistributionSystem
 %                         && ((obj.lossChain(1, obj.iter-3) - obj.lossChain(1, obj.iter-4)) < 0))
                         obj.step = min(obj.step * 1.2, obj.stepMax);
                         obj.momentRatio = max(obj.momentRatio - 0.1, obj.momentRatioMin);
-%                     elseif (mean(obj.lossChain(1, obj.iter-9:obj.iter-5)) / mean(obj.lossChain(1, obj.iter-4:obj.iter)) > 1.001)
-%                         obj.step = min(obj.step * 1.2, obj.stepMax);
-%                         obj.momentRatio = max(obj.momentRatio - 0.1, obj.momentRatioMin);
                     elseif (((obj.lossChain(1, obj.iter) - obj.lossChain(1, obj.iter-1)) *...
                         (obj.lossChain(1, obj.iter-1) - obj.lossChain(1, obj.iter-2)) < 0)...
                         && ((obj.lossChain(1, obj.iter-7) - obj.lossChain(1, obj.iter-8)) *...
@@ -1172,14 +1171,21 @@ classdef caseDistributionSystemMeasure < caseDistributionSystem
             % This function identify the topology and the parameters using
             % the LM-based strategy and the knowledge of power flow
             % equations
-            obj.lambda = obj.numBus * obj.numSnap * 1e6;
-            obj.maxIter = 2000;
+            obj.lambda = 1e2; % the proportion of first order gradient
+            obj.lambdaMin = 1e-3;
+            obj.lambdaMax = 1e3;
+            
+            obj.step = 1;
+            obj.stepMin = 1e-4;
+            obj.stepMax = 2;
+            
+            obj.maxIter = 3000;
             obj.thsTopo = 0.01;
             obj.Topo = true(obj.numBus, obj.numBus);
             obj.Tvec = logical(obj.matOfColDE(obj.Topo));
             obj.vmvaWeight = 1;
-            obj.maxLambda = 1e8;
-            obj.minLambda = 1e4;
+            
+            obj.momentRatio = 0.9;
             
             % we first initialize the data
             obj.dataO.G = obj.dataE.G;
@@ -1205,6 +1211,8 @@ classdef caseDistributionSystemMeasure < caseDistributionSystem
             obj.iter = 1;
             obj.lossChain = zeros(5, obj.maxIter);
             obj.parChain = zeros(obj.numGrad.Sum, obj.maxIter);
+            obj.stepChain = zeros(1, obj.maxIter);
+            obj.lambdaChain = zeros(1, obj.maxIter);
             obj.isGB = false;
             obj.isConverge = 0;
             while (obj.iter <= obj.maxIter && obj.isConverge <= 2)
@@ -1228,57 +1236,85 @@ classdef caseDistributionSystemMeasure < caseDistributionSystem
             % This method updates the parameters using LM strategies and
             % iteratively updates the GB and VmVa
             % calculate the modified Hessian
-            H1 = obj.H + diag(obj.lambda * abs((obj.grad).^(-1)));
+            
             % we update all the parameters together
-            id = 1
-            if obj.isGB
-%                 delta = zeros(obj.numGrad.G+obj.numGrad.B, 1);
-%                 id = [obj.Tvec; obj.Tvec];
-                id = 1:obj.numGrad.G+obj.numGrad.B;
-                delta = H1(id, id) \ obj.gradOrigin(id);
-                % converge or not
-                if (max(abs(delta)) < 1e-5)
-                    obj.isConverge = obj.isConverge + 1;
-                else
-                    obj.isConverge = 0;
-                end
-                obj.isGB = false;
-                % update the parameters
-                par = zeros(obj.numGrad.Sum, 1);
-                par(id) = obj.parChain(id, obj.iter) - delta(id);
-                G = par(1:obj.numGrad.G);
-                B = par(1+obj.numGrad.G:obj.numGrad.G+obj.numGrad.B);
-                G(G>0) = 0;
-                B(B<0) = 0;
-                obj.dataO.G = obj.colToMatDE(G, obj.numBus);
-                obj.dataO.B = obj.colToMatDE(B, obj.numBus);
-            else
-                id = 1+obj.numGrad.B+obj.numGrad.G:obj.numGrad.Sum;
-                delta = H1(id, id) \ obj.gradOrigin(id);
-                % converge or not
-                if (max(abs(delta)) < 1e-9)
-                    obj.isConverge = obj.isConverge + 1;
-                else
-                    obj.isConverge = 0;
-                end
-                obj.isGB = true;
-                % update the paramters
-                par = zeros(obj.numGrad.Sum, 1);
-                par(id) = obj.parChain(id, obj.iter) - delta;
-                Vm = par(1+obj.numGrad.G+obj.numGrad.B:obj.numGrad.G+obj.numGrad.B+obj.numGrad.Vm);
-                Va = par(1+obj.numGrad.G+obj.numGrad.B+obj.numGrad.Vm:end);
-                obj.dataO.Vm(2:end, :) = reshape(Vm, [], obj.numBus-1)'; % exclude the source bus
-                obj.dataO.Va(2:end, :) = reshape(Va, [], obj.numBus-1)'; % exclude the source bus
+            id = 1:obj.numGrad.Sum;
+            try
+                moment = obj.gradPast * obj.momentRatio + obj.grad * (1-obj.momentRatio);
+            catch
+                moment = obj.grad;
             end
-            % update the lambda
+            obj.gradPast = moment;
+            delta1 = obj.step * moment(id);
+            delta2 = obj.H(id, id) \ obj.gradOrigin(id);
+            delta = delta1 * obj.lambda/(1+obj.lambda) + delta2 * 1/(1+obj.lambda);
+            par = zeros(obj.numGrad.Sum, 1);
+            
+            par(id) = obj.parChain(id, obj.iter) - delta(id);
+            G = par(1:obj.numGrad.G);
+            B = par(1+obj.numGrad.G:obj.numGrad.G+obj.numGrad.B);
+%             G(G>0) = 0;
+%             B(B<0) = 0;
+            obj.dataO.G = obj.colToMatDE(G, obj.numBus);
+            obj.dataO.B = obj.colToMatDE(B, obj.numBus);
+            
+            Vm = par(1+obj.numGrad.G+obj.numGrad.B:obj.numGrad.G+obj.numGrad.B+obj.numGrad.Vm);
+            Va = par(1+obj.numGrad.G+obj.numGrad.B+obj.numGrad.Vm:end);
+            obj.dataO.Vm(2:end, :) = reshape(Vm, [], obj.numBus-1)'; % exclude the source bus
+            obj.dataO.Va(2:end, :) = reshape(Va, [], obj.numBus-1)'; % exclude the source bus
+            
+%             if obj.isGB
+% %                 delta = zeros(obj.numGrad.G+obj.numGrad.B, 1);
+% %                 id = [obj.Tvec; obj.Tvec];
+%                 id = 1:obj.numGrad.G+obj.numGrad.B;
+%                 delta = H1(id, id) \ obj.gradOrigin(id);
+%                 % converge or not
+%                 if (max(abs(delta)) < 1e-5)
+%                     obj.isConverge = obj.isConverge + 1;
+%                 else
+%                     obj.isConverge = 0;
+%                 end
+%                 obj.isGB = false;
+%                 % update the parameters
+%                 par = zeros(obj.numGrad.Sum, 1);
+%                 par(id) = obj.parChain(id, obj.iter) - delta(id);
+%                 G = par(1:obj.numGrad.G);
+%                 B = par(1+obj.numGrad.G:obj.numGrad.G+obj.numGrad.B);
+%                 G(G>0) = 0;
+%                 B(B<0) = 0;
+%                 obj.dataO.G = obj.colToMatDE(G, obj.numBus);
+%                 obj.dataO.B = obj.colToMatDE(B, obj.numBus);
+%             else
+%                 id = 1+obj.numGrad.B+obj.numGrad.G:obj.numGrad.Sum;
+%                 delta = H1(id, id) \ obj.gradOrigin(id);
+%                 % converge or not
+%                 if (max(abs(delta)) < 1e-9)
+%                     obj.isConverge = obj.isConverge + 1;
+%                 else
+%                     obj.isConverge = 0;
+%                 end
+%                 obj.isGB = true;
+%                 % update the paramters
+%                 par = zeros(obj.numGrad.Sum, 1);
+%                 par(id) = obj.parChain(id, obj.iter) - delta;
+%                 Vm = par(1+obj.numGrad.G+obj.numGrad.B:obj.numGrad.G+obj.numGrad.B+obj.numGrad.Vm);
+%                 Va = par(1+obj.numGrad.G+obj.numGrad.B+obj.numGrad.Vm:end);
+%                 obj.dataO.Vm(2:end, :) = reshape(Vm, [], obj.numBus-1)'; % exclude the source bus
+%                 obj.dataO.Va(2:end, :) = reshape(Va, [], obj.numBus-1)'; % exclude the source bus
+%             end
+            % update the lambda and the step length
             try
                 if obj.lossChain(1, obj.iter) < obj.lossChain(1, obj.iter-1)
-                    obj.lambda = max(obj.lambda, obj.minLambda);
+                    obj.lambda = max(obj.lambda / 1.2, obj.lambdaMin);
+                    obj.step = min(obj.step * 1.2, obj.stepMax);
                 else
-                    obj.lambda = min(obj.lambda * 3, obj.maxLambda);
+                    obj.lambda = min(obj.lambda * 2, obj.lambdaMax);
+                    obj.step = max(obj.step / 2, obj.stepMin);
                 end
             catch
             end
+            obj.lambdaChain(obj.iter) = obj.lambda/(1+obj.lambda);
+            obj.stepChain(obj.iter) = obj.step;
         end
         
         function obj = buildJacobian(obj)
