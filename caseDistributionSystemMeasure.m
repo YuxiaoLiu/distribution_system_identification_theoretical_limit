@@ -60,6 +60,7 @@ classdef caseDistributionSystemMeasure < caseDistributionSystem
         lambdaChain         % the chain of lambda ratio, the first order ratio
         gradOrigin          % the original gradient in LM algorithm
         gradPast            % the gradient of the last step
+        lossMin             % the theoretical minimum loss
     end
     
     methods
@@ -1172,14 +1173,14 @@ classdef caseDistributionSystemMeasure < caseDistributionSystem
             % the LM-based strategy and the knowledge of power flow
             % equations
             obj.lambda = 1e2; % the proportion of first order gradient
-            obj.lambdaMin = 1e-3;
-            obj.lambdaMax = 1e3;
+            obj.lambdaMin = 1e-4;
+            obj.lambdaMax = 1e4;
             
             obj.step = 1;
             obj.stepMin = 1e-4;
             obj.stepMax = 2;
             
-            obj.maxIter = 3000;
+            obj.maxIter = 10000;
             obj.thsTopo = 0.01;
             obj.Topo = true(obj.numBus, obj.numBus);
             obj.Tvec = logical(obj.matOfColDE(obj.Topo));
@@ -1207,6 +1208,9 @@ classdef caseDistributionSystemMeasure < caseDistributionSystem
             obj.numGrad.Va = obj.numSnap * (obj.numBus - 1);
             obj.numGrad.Sum = obj.numGrad.G + obj.numGrad.B + obj.numGrad.Vm + obj.numGrad.Va;
             
+            % evaluate the minimum loss
+            obj = evaluateLossMin(obj);
+            
             % begin the iteration loop
             obj.iter = 1;
             obj.lossChain = zeros(5, obj.maxIter);
@@ -1230,6 +1234,12 @@ classdef caseDistributionSystemMeasure < caseDistributionSystem
                 obj = updateParLMPower(obj);
                 obj.iter = obj.iter + 1;
             end
+        end
+        
+        function obj = evaluateLossMin(obj)
+            % This method evalutes the minimum loss
+            obj.lossMin = obj.numSnap *...
+                sum([obj.isMeasure.P;obj.isMeasure.Q;obj.isMeasure.Vm;obj.isMeasure.Va]);
         end
         
         function obj = updateParLMPower(obj)
@@ -1315,8 +1325,13 @@ classdef caseDistributionSystemMeasure < caseDistributionSystem
                 end
             catch
             end
-            obj.lambdaChain(obj.iter) = obj.lambda/(1+obj.lambda);
+            obj.lambdaChain(obj.iter) = obj.lambda;
             obj.stepChain(obj.iter) = obj.step;
+            obj.lambdaMax = log10(max(obj.loss.total, obj.lossMin * 10) / obj.lossMin) * 1000;
+            % converge or not
+%             if obj.loss.total < obj.lossMin
+%                 obj.isConverge = 3;
+%             end
         end
         
         function obj = buildJacobian(obj)
