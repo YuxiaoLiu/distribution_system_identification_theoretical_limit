@@ -61,7 +61,7 @@ classdef caseDistributionSystemMeasure < caseDistributionSystem
         gradOrigin          % the original gradient in LM algorithm
         gradPast            % the gradient of the last step
         lossMin             % the theoretical minimum loss
-        momentLoss          % the moment of loss
+        lossMoment          % the moment of loss
     end
     
     methods
@@ -1181,7 +1181,7 @@ classdef caseDistributionSystemMeasure < caseDistributionSystem
             obj.stepMin = 1e-4;
             obj.stepMax = 2;
             
-            obj.maxIter = 2000;
+            obj.maxIter = 5000;
             obj.thsTopo = 0.01;
             obj.Topo = true(obj.numBus, obj.numBus);
             obj.Tvec = logical(obj.matOfColDE(obj.Topo));
@@ -1252,6 +1252,7 @@ classdef caseDistributionSystemMeasure < caseDistributionSystem
             id = 1:obj.numGrad.Sum;
             try
                 moment = obj.gradPast * obj.momentRatio + obj.grad * (1-obj.momentRatio);
+                momentLoss
             catch
                 moment = obj.grad;
             end
@@ -1326,18 +1327,6 @@ classdef caseDistributionSystemMeasure < caseDistributionSystem
                 end
             catch
             end
-%             if obj.iter > 1 % I think we should use PD control here, currently it is only D control
-%                 if obj.loss.total < obj.momentLoss
-%                     obj.lambda = max(obj.lambda / 1.2, obj.lambdaMin);
-%                     obj.step = min(obj.step * 1.2, obj.stepMax);
-%                 else
-%                     obj.lambda = min(obj.lambda * 2, obj.lambdaMax);
-%                     obj.step = max(obj.step / 2, obj.stepMin);
-%                 end
-%                 obj.momentLoss = obj.momentLoss * 0.1 + obj.loss.total * (1-0.1);
-%             else
-%                 obj.momentLoss = obj.loss.total;
-%             end
             obj.lambdaChain(obj.iter) = obj.lambda;
             obj.stepChain(obj.iter) = obj.step;
             obj.lambdaMax = log10(max(obj.loss.total, obj.lossMin * 10) / obj.lossMin) * 1000;
