@@ -1174,14 +1174,14 @@ classdef caseDistributionSystemMeasure < caseDistributionSystem
             % the LM-based strategy and the knowledge of power flow
             % equations
             obj.lambda = 1e2; % the proportion of first order gradient
-            obj.lambdaMin = 1e-4;
-            obj.lambdaMax = 1e4;
+            obj.lambdaMin = 1e-3;
+            obj.lambdaMax = 1e3;
             
             obj.step = 1;
             obj.stepMin = 1e-4;
             obj.stepMax = 2;
             
-            obj.maxIter = 2000;
+            obj.maxIter = 1000;
             obj.thsTopo = 0.01;
             obj.Topo = true(obj.numBus, obj.numBus);
             obj.Tvec = logical(obj.matOfColDE(obj.Topo));
@@ -1318,11 +1318,15 @@ classdef caseDistributionSystemMeasure < caseDistributionSystem
             % update the lambda and the step length
             try % I think we should use PD control here, currently it is only D control
                 if obj.lossChain(1, obj.iter) < obj.lossChain(1, obj.iter-1)
-                    obj.lambda = max(obj.lambda / 1.2, obj.lambdaMin);
-                    obj.step = min(obj.step * 1.2, obj.stepMax);
+%                     ratio = (obj.lossChain(1, obj.iter-1) / obj.lossChain(1, obj.iter));
+                    obj.lambda = max(obj.lambda / 1.1, obj.lambdaMin);
+                    obj.step = min(obj.step * 1.1, obj.stepMax);
                 else
-                    obj.lambda = min(obj.lambda * 2, obj.lambdaMax);
-                    obj.step = max(obj.step / 2, obj.stepMin);
+%                     ratio = (obj.lossChain(1, obj.iter) / obj.lossChain(1, obj.iter-1))^2;
+                    ratio = log10(max(obj.loss.total, obj.lossMin * 10) / obj.lossMin);
+                    dRatio = 10/ratio;
+                    obj.lambda = min(obj.lambda * (1.1+dRatio), obj.lambdaMax);
+                    obj.step = max(obj.step / (1.1+dRatio), obj.stepMin);
                 end
             catch
             end
@@ -1340,7 +1344,7 @@ classdef caseDistributionSystemMeasure < caseDistributionSystem
 %             end
             obj.lambdaChain(obj.iter) = obj.lambda;
             obj.stepChain(obj.iter) = obj.step;
-            obj.lambdaMax = log10(max(obj.loss.total, obj.lossMin * 10) / obj.lossMin) * 1000;
+%             obj.lambdaMax = log10(max(obj.loss.total, obj.lossMin * 10) / obj.lossMin) * 1000;
             % converge or not
 %             if obj.loss.total < obj.lossMin
 %                 obj.isConverge = 3;
