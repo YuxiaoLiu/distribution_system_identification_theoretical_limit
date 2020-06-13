@@ -613,10 +613,10 @@ classdef caseDistributionSystemMeasure < caseDistributionSystem
             % Hopefully we could implement some power system domain
             % knowledge into the process because we know the ground truth
             % value.
-            obj.maxIter = 2000;
+            obj.maxIter = 5000;
             obj.step = 1;
             obj.stepMax = 2;
-            obj.stepMin = 0.01;
+            obj.stepMin = 0.0001;
             obj.momentRatio = 0.9;
             obj.updateStepFreq = 20;
             obj.vmvaWeight = 1;
@@ -1180,7 +1180,7 @@ classdef caseDistributionSystemMeasure < caseDistributionSystem
             obj.stepMin = 1e-4;
             obj.stepMax = 2;
             
-            obj.maxIter = 10000;
+            obj.maxIter = 5000;
             obj.thsTopo = 0.01;
             obj.Topo = true(obj.numBus, obj.numBus);
             obj.Tvec = logical(obj.matOfColDE(obj.Topo));
@@ -1315,7 +1315,7 @@ classdef caseDistributionSystemMeasure < caseDistributionSystem
 %                 obj.dataO.Va(2:end, :) = reshape(Va, [], obj.numBus-1)'; % exclude the source bus
 %             end
             % update the lambda and the step length
-            try
+            try % I think we should use PD control here, currently it is only D control
                 if obj.lossChain(1, obj.iter) < obj.lossChain(1, obj.iter-1)
                     obj.lambda = max(obj.lambda / 1.2, obj.lambdaMin);
                     obj.step = min(obj.step * 1.2, obj.stepMax);
