@@ -52,7 +52,7 @@ switch caseName
         ratio.Qmin = 0.01;
 end
 
-profile on;
+% profile on;
 %% We generate the power flow data
 caseDS = caseDistributionSystemMeasure(caseName, numSnap, range);
 caseDS = caseDS.readLoad;
@@ -78,5 +78,5 @@ caseDS = caseDS.identifyOptLMPower;
 % caseDS = caseDS.identifyOptNewton;
 % caseDS = caseDS.buildFIM(k);
 % caseDS = caseDS.updateTopo(topoTol, admittanceOnly);
-profile off;
-profile viewer;
+% profile off;
+% profile viewer;
