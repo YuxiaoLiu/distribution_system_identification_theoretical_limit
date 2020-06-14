@@ -614,7 +614,7 @@ classdef caseDistributionSystemMeasure < caseDistributionSystem
             % Hopefully we could implement some power system domain
             % knowledge into the process because we know the ground truth
             % value.
-            obj.maxIter = 5000;
+            obj.maxIter = 2000;
             obj.step = 1;
             obj.stepMax = 2;
             obj.stepMin = 0.0001;
@@ -1093,10 +1093,10 @@ classdef caseDistributionSystemMeasure < caseDistributionSystem
             % gather the par values
             G = par(1:obj.numGrad.G);
             B = par(1+obj.numGrad.G:obj.numGrad.G+obj.numGrad.B);
-            G(G>0) = 0;
+%             G(G>0) = 0;
 %             B(B<0) = 0;
 %             G(B==0) = 0; % we do not use it because it will cause sudden change
-            B(G==0) = 0;
+%             B(G==0) = 0;
             % we first do not assume any topologies, then we would add some
             % topology iteration techiques.
             obj.dataO.G = obj.colToMatDE(G, obj.numBus);
@@ -1173,7 +1173,7 @@ classdef caseDistributionSystemMeasure < caseDistributionSystem
             % This function identify the topology and the parameters using
             % the LM-based strategy and the knowledge of power flow
             % equations
-            obj.lambda = 1e2; % the proportion of first order gradient
+            obj.lambda = 1e3; % the proportion of first order gradient
             obj.lambdaMin = 1e-3;
             obj.lambdaMax = 1e3;
             
@@ -1181,7 +1181,7 @@ classdef caseDistributionSystemMeasure < caseDistributionSystem
             obj.stepMin = 1e-4;
             obj.stepMax = 2;
             
-            obj.maxIter = 1000;
+            obj.maxIter = 3000;
             obj.thsTopo = 0.01;
             obj.Topo = true(obj.numBus, obj.numBus);
             obj.Tvec = logical(obj.matOfColDE(obj.Topo));
@@ -1235,6 +1235,10 @@ classdef caseDistributionSystemMeasure < caseDistributionSystem
                 obj = updateParLMPower(obj);
                 obj.iter = obj.iter + 1;
             end
+            obj.lossChain(:, obj.iter:end) = [];
+            obj.parChain(:, obj.iter:end) = [];
+            obj.stepChain(:, obj.iter:end) = [];
+            obj.lambdaChain(:, obj.iter:end) = [];
         end
         
         function obj = evaluateLossMin(obj)
@@ -1261,7 +1265,12 @@ classdef caseDistributionSystemMeasure < caseDistributionSystem
             delta2 = obj.H(id, id) \ obj.gradOrigin(id);
             delta = delta1 * obj.lambda/(1+obj.lambda) + delta2 * 1/(1+obj.lambda);
 %             delta = delta * obj.step;
+
+%             H1 = moment * obj.lambda + obj.H;
+%             delta = H1(id, id) \ obj.gradOrigin(id);
             par = zeros(obj.numGrad.Sum, 1);
+            
+            
             
             par(id) = obj.parChain(id, obj.iter) - delta(id);
             G = par(1:obj.numGrad.G);
@@ -1326,6 +1335,8 @@ classdef caseDistributionSystemMeasure < caseDistributionSystem
                     ratio = log10(max(obj.loss.total, obj.lossMin * 10) / obj.lossMin);
                     dRatio = 10/ratio;
                     obj.lambda = min(obj.lambda * (1.1+dRatio), obj.lambdaMax);
+%                     dRatio = 0.5;
+                    obj.lambda = min(obj.lambda * (1.1+dRatio), obj.lambdaMax);
                     obj.step = max(obj.step / (1.1+dRatio), obj.stepMin);
                 end
             catch
@@ -1346,9 +1357,9 @@ classdef caseDistributionSystemMeasure < caseDistributionSystem
             obj.stepChain(obj.iter) = obj.step;
 %             obj.lambdaMax = log10(max(obj.loss.total, obj.lossMin * 10) / obj.lossMin) * 1000;
             % converge or not
-%             if obj.loss.total < obj.lossMin
-%                 obj.isConverge = 3;
-%             end
+            if obj.loss.total < obj.lossMin
+                obj.isConverge = 3;
+            end
         end
         
         function obj = buildJacobian(obj)
