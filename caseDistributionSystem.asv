@@ -267,10 +267,10 @@ classdef caseDistributionSystem < handle
             obj.numFIM.Sum = obj.numFIM.G + obj.numFIM.B + obj.numFIM.Vm + obj.numFIM.Va;
             
             obj.FIM = zeros(obj.numFIM.Sum, obj.numFIM.Sum);
-%             obj.FIMP = sparse(obj.numFIM.Sum, obj.numFIM.Sum);
-%             obj.FIMQ = sparse(obj.numFIM.Sum, obj.numFIM.Sum);
-%             obj.FIMVm = sparse(obj.numFIM.Sum, obj.numFIM.Sum);
-%             obj.FIMVa = sparse(obj.numFIM.Sum, obj.numFIM.Sum);
+            obj.FIMP = sparse(obj.numFIM.Sum, obj.numFIM.Sum);
+            obj.FIMQ = sparse(obj.numFIM.Sum, obj.numFIM.Sum);
+            obj.FIMVm = sparse(obj.numFIM.Sum, obj.numFIM.Sum);
+            obj.FIMVa = sparse(obj.numFIM.Sum, obj.numFIM.Sum);
             
             obj.numMeasure = obj.numSnap *...
                 sum([obj.isMeasure.P;obj.isMeasure.Q;obj.isMeasure.Vm;obj.isMeasure.Va]);
@@ -405,7 +405,7 @@ classdef caseDistributionSystem < handle
 %             obj.FIMP = obj.FIMP + FIMPThis;
         end
         
-        function obj = buildFIMQ(obj, bus, snap, pt)
+        function obj = buildFIMQ(obj, bus, snap)
             % This method build the Q part of FIM a selected bus and a selected snapshot. 
             
             h = sparse(obj.numFIM.Sum, 1);
@@ -520,7 +520,7 @@ classdef caseDistributionSystem < handle
                 obj.FIM = A - B/C*B';
                 var = diag(obj.FIM(obj.numFIM.index, obj.numFIM.index)\eye(sum(obj.numFIM.index)));
             else
-                var = diag(full(obj.FIM(obj.numFIM.index, obj.numFIM.index))\eye(sum(obj.numFIM.index)));
+                var = diag(obj.FIM(obj.numFIM.index, obj.numFIM.index)\eye(sum(obj.numFIM.index)));
 %                 % use the svd method
 %                 [u,s,v] = svd(obj.FIM);
 %                 cov2 = v * diag(1./diag(s)) * u';

@@ -63,8 +63,6 @@ classdef caseDistributionSystemMeasure < caseDistributionSystem
         lossMin             % the theoretical minimum loss
         momentLoss          % the moment of loss
         
-        M                   % the measurement matrix
-        numMeasure          % the number of measurements
         idGB                % the address of G and B matrix
         idVmVa              % the id of Vm and Va
     end
@@ -140,54 +138,64 @@ classdef caseDistributionSystemMeasure < caseDistributionSystem
             obj.numFIM.Va = obj.numSnap * (obj.numBus - 1);
             obj.numFIM.Sum = obj.numFIM.G + obj.numFIM.B + obj.numFIM.Vm + obj.numFIM.Va;
             
-            obj.A_FIM = zeros(obj.numFIM.Sum, obj.numFIM.Sum);
-            obj.A_FIMP = sparse(obj.numFIM.Sum, obj.numFIM.Sum);
-            obj.A_FIMQ = sparse(obj.numFIM.Sum, obj.numFIM.Sum);
-            obj.FIMVm = sparse(obj.numFIM.Sum, obj.numFIM.Sum);
-            obj.FIMVa = sparse(obj.numFIM.Sum, obj.numFIM.Sum);
+            obj.numMeasure = obj.numSnap *...
+                sum([obj.isMeasure.P;obj.isMeasure.Q;obj.isMeasure.Vm;obj.isMeasure.Va]);
+            obj.M = zeros(obj.numFIM.Sum, obj.numMeasure);
+%             obj.A_FIM = zeros(obj.numFIM.Sum, obj.numFIM.Sum);
+%             obj.A_FIMP = sparse(obj.numFIM.Sum, obj.numFIM.Sum);
+%             obj.A_FIMQ = sparse(obj.numFIM.Sum, obj.numFIM.Sum);
+%             obj.FIMVm = sparse(obj.numFIM.Sum, obj.numFIM.Sum);
+%             obj.FIMVa = sparse(obj.numFIM.Sum, obj.numFIM.Sum);
             
+            pt = 1;
             % calculate the sub-matrix of P of all snapshots and all buses
             for i = 1:obj.numBus
                 if obj.isMeasure.P(i)
                     for j = 1:obj.numSnap
-                        obj = approximateFIMP(obj, i, j);
+                        obj = approximateFIMP(obj, i, j, pt);
+                        pt = pt + 1;
                     end
                 end
             end
-            obj.A_FIM = obj.A_FIM + full(obj.A_FIMP);
+%             obj.A_FIM = obj.A_FIM + full(obj.A_FIMP);
             % calculate the sub-matrix of Q of all snapshots and all buses
             for i = 1:obj.numBus
                 if obj.isMeasure.Q(i)
                     for j = 1:obj.numSnap
-                        obj = approximateFIMQ(obj, i, j);
+                        obj = approximateFIMQ(obj, i, j, pt);
+                        pt = pt + 1;
                     end
                 end
             end
-            obj.A_FIM = obj.A_FIM + full(obj.A_FIMQ);
+%             obj.A_FIM = obj.A_FIM + full(obj.A_FIMQ);
             % calculate the sub-matrix of Vm of all snapshots and all buses
             for i = 1:obj.numBus
                 if obj.isMeasure.Vm(i)
                     for j = 1:obj.numSnap
-                        obj = buildFIMVm(obj, i, j);
+                        obj = buildFIMVm(obj, i, j, pt);
+                        pt = pt + 1;
                     end
                 end
             end
-            obj.A_FIM = obj.A_FIM + full(obj.FIMVm);
+%             obj.A_FIM = obj.A_FIM + full(obj.FIMVm);
             % calculate the sub-matrix of Va of all snapshots and all buses
             for i = 1:obj.numBus
                 if obj.isMeasure.Va(i)
                     for j = 1:obj.numSnap
-                        obj = buildFIMVa(obj, i, j);
+                        obj = buildFIMVa(obj, i, j, pt);
+                        pt = pt + 1;
                     end
                 end
             end
-            obj.A_FIM = obj.A_FIM + full(obj.FIMVa);
+%             obj.A_FIM = obj.A_FIM + full(obj.FIMVa);
+            Ms = sparse(obj.M);
+            obj.A_FIM = Ms * Ms';
         end
         
-        function obj = approximateFIMP(obj, bus, snap)
+        function obj = approximateFIMP(obj, bus, snap, pt)
             % This method approximate the P part of FIM. We ignore the sin
             % part of the power flow equations.
-            h = sparse(obj.numFIM.Sum, 1);
+            h = zeros(obj.numFIM.Sum, 1);
             theta_ij = obj.dataE.Va(bus, snap) - obj.dataE.Va(:, snap);
 %             Theta_ij = repmat(obj.dataE.Va(:, snap), 1, obj.numBus) - repmat(obj.dataE.Va(:, snap)', obj.numBus, 1);
 %             % G_ij\cos(\Theta_ij)+B_ij\sin(\Theta_ij)
@@ -235,14 +243,15 @@ classdef caseDistributionSystemMeasure < caseDistributionSystem
             
             % build FIMP
             h = h / obj.sigma.P(bus);
-            FIMPThis = h * h';
-            obj.A_FIMP = obj.A_FIMP + FIMPThis;
+            obj.M(:, pt) = h;
+%             FIMPThis = h * h';
+%             obj.A_FIMP = obj.A_FIMP + FIMPThis;
         end
         
-        function obj = approximateFIMQ(obj, bus, snap)
+        function obj = approximateFIMQ(obj, bus, snap, pt)
             % This method approximate the Q part of FIM. We ignore the sin
             % part of the power flow equations.
-            h = sparse(obj.numFIM.Sum, 1);
+            h = zeros(obj.numFIM.Sum, 1);
             theta_ij = obj.dataE.Va(bus, snap) - obj.dataE.Va(:, snap);
 %             Theta_ij = repmat(obj.dataE.Va(:, snap), 1, obj.numBus) - repmat(obj.dataE.Va(:, snap)', obj.numBus, 1);
 %             % G_ij\cos(\Theta_ij)+B_ij\sin(\Theta_ij)
@@ -290,8 +299,9 @@ classdef caseDistributionSystemMeasure < caseDistributionSystem
             
             % build FIMQ
             h = h / obj.sigma.Q(bus);
-            FIMQThis = h * h';
-            obj.A_FIMQ = obj.A_FIMQ + FIMQThis;
+            obj.M(:, pt) = h;
+%             FIMQThis = h * h';
+%             obj.A_FIMQ = obj.A_FIMQ + FIMQThis;
         end
         
         function obj = calABound(obj, varargin)
@@ -324,7 +334,7 @@ classdef caseDistributionSystemMeasure < caseDistributionSystem
                 cov = obj.A_FIM(obj.numFIM.index, obj.numFIM.index)\eye(sum(obj.numFIM.index));
                 var = diag(cov);
             else
-                cov = obj.A_FIM(obj.numFIM.index, obj.numFIM.index)\eye(sum(obj.numFIM.index));
+                cov = full(obj.A_FIM(obj.numFIM.index, obj.numFIM.index))\eye(sum(obj.numFIM.index));
                 var = diag(cov);
 %                 % we construct a Hermitian matrix H and use Cholesky
 %                 % decomposition to compute the inverse matrix
@@ -1227,6 +1237,7 @@ classdef caseDistributionSystemMeasure < caseDistributionSystem
             obj.isConverge = 0;
             
             while (obj.iter <= obj.maxIter && obj.isConverge <= 2)
+                disp(obj.iter);
 %                 profile on;
                 % collect the parameter vector
                 obj = collectPar(obj);
@@ -1631,7 +1642,7 @@ classdef caseDistributionSystemMeasure < caseDistributionSystem
             for i = 1:obj.numBus
                 obj.idGB(i, i+1:end) = id:id+obj.numBus-i-1;
                 obj.idGB(i+1:end, i) = id:id+obj.numBus-i-1;
-                id = id++obj.numBus-i;
+                id = id+obj.numBus-i;
             end
             pt = 1;
             
