@@ -66,6 +66,7 @@ classdef caseDistributionSystemMeasure < caseDistributionSystem
         M                   % the measurement matrix
         numMeasure          % the number of measurements
         idGB                % the address of G and B matrix
+        idVmVa              % the id of Vm and Va
     end
     
     methods
@@ -1612,7 +1613,6 @@ classdef caseDistributionSystemMeasure < caseDistributionSystem
             obj.numMeasure = obj.numSnap *...
                 sum([obj.isMeasure.P;obj.isMeasure.Q;obj.isMeasure.Vm;obj.isMeasure.Va]);
             obj.M = zeros(obj.numGrad.Sum, obj.numMeasure);
-%             R = zeros(obj.numMeasure, 1);
             % Initialize the gradient matrix
             obj.grad = zeros(obj.numGrad.Sum, 1);
             obj.gradP = zeros(obj.numGrad.Sum, 1);
@@ -1633,9 +1633,8 @@ classdef caseDistributionSystemMeasure < caseDistributionSystem
                 obj.idGB(i+1:end, i) = id:id+obj.numBus-i-1;
                 id = id++obj.numBus-i;
             end
-%             test = obj.data.G(trueGB(:, 2));
-%             test2 = obj.data.G(trueGB(2, :));
             pt = 1;
+            
             % start the loop
             for i = 1:obj.numSnap
                 % calculate some basic parameters at present state
@@ -1648,6 +1647,8 @@ classdef caseDistributionSystemMeasure < caseDistributionSystem
                 Pest = (GBThetaP * obj.dataO.Vm(:, i)) .* obj.dataO.Vm(:, i);
                 % Q estimate
                 Qest = (GBThetaQ * obj.dataO.Vm(:, i)) .* obj.dataO.Vm(:, i);
+                % the id of Vm and Va
+                obj.idVmVa = obj.numSnap * (0:obj.numBus-2) + i;
                 
                 % calculate the sub-vector of P of all buses
                 for j = 1:obj.numBus
@@ -1710,7 +1711,7 @@ classdef caseDistributionSystemMeasure < caseDistributionSystem
             h_BB = obj.dataO.Vm(bus, snap) * obj.dataO.Vm(:, snap)' .* sin(theta_ij');
             g(obj.numGrad.G+obj.idGB(bus, [1:bus-1 bus+1:end])) = h_BB([1:bus-1 bus+1:end]);
             
-            idVmVa = obj.numSnap * (0:obj.numBus-2) +snap;
+            
             % Vm
             % the first order term of other Vm
             h_Vm = obj.dataO.Vm(bus, snap) * GBThetaP(:, bus);
@@ -1720,14 +1721,14 @@ classdef caseDistributionSystemMeasure < caseDistributionSystem
             fOrderVm = obj.dataO.Vm(:, snap) .* GBThetaP(:, bus);
             fOrderVm(bus) = 0;
             h_Vm(bus) = h_Vm(bus) + sum(fOrderVm);
-            g(obj.numGrad.G+obj.numGrad.B+idVmVa) = h_Vm(2:end);
+            g(obj.numGrad.G+obj.numGrad.B+obj.idVmVa) = h_Vm(2:end);
             
             % Va
             h_Va = obj.dataO.Vm(bus, snap) * obj.dataO.Vm(:, snap) .* GBThetaQ(:, bus);
             h_Va(bus) = - obj.dataO.Vm(bus, snap)^2 * obj.dataO.B(bus, bus)...
                        - obj.data.Q_noised(bus, snap); 
             h_Va(bus) = h_Va(bus)-sum(GBThetaQ(bus, :) * obj.dataO.Vm(:, snap) * obj.dataO.Vm(bus, snap));
-            g(obj.numGrad.G+obj.numGrad.B+obj.numGrad.Vm+idVmVa) = h_Va(2:end);
+            g(obj.numGrad.G+obj.numGrad.B+obj.numGrad.Vm+obj.idVmVa) = h_Va(2:end);
             
             % build HP, gradP and loss.P
             lossThis = (Pest(bus) - obj.data.P_noised(bus, snap));
@@ -1756,7 +1757,6 @@ classdef caseDistributionSystemMeasure < caseDistributionSystem
             h_BB = h_BB + obj.dataO.Vm(bus, snap)^2; % the equivilance of diagonal elements
             g(obj.numGrad.G+obj.idGB(bus, [1:bus-1 bus+1:end])) = h_BB([1:bus-1 bus+1:end]);
             
-            idVmVa = obj.numSnap * (0:obj.numBus-2) +snap;
             % Vm
             % the first order term of other Vm
             h_Vm = obj.dataO.Vm(bus, snap) * GBThetaQ(:, bus);
@@ -1766,13 +1766,13 @@ classdef caseDistributionSystemMeasure < caseDistributionSystem
             fOrderVm = obj.dataO.Vm(:, snap) .* GBThetaQ(:, bus);
             fOrderVm(bus) = 0;
             h_Vm(bus) = h_Vm(bus) + sum(fOrderVm);
-            g(obj.numGrad.G+obj.numGrad.B+idVmVa) = h_Vm(2:end);
+            g(obj.numGrad.G+obj.numGrad.B+obj.idVmVa) = h_Vm(2:end);
             
             % Va
             h_Va = - obj.dataO.Vm(bus, snap) * obj.dataO.Vm(:, snap) .* GBThetaP(:, bus);
             h_Va(bus) = - obj.dataO.Vm(bus, snap)^2 * obj.dataO.G(bus, bus) ...
                         + obj.data.P_noised(bus, snap);
-            g(obj.numGrad.G+obj.numGrad.B+obj.numGrad.Vm+idVmVa) = h_Va(2:end);
+            g(obj.numGrad.G+obj.numGrad.B+obj.numGrad.Vm+obj.idVmVa) = h_Va(2:end);
             
             % build HQ, GradientQ and lossQ
             lossThis = (Qest(bus) - obj.data.Q_noised(bus, snap));
@@ -1792,16 +1792,16 @@ classdef caseDistributionSystemMeasure < caseDistributionSystem
             % remove the source bus whose magnitude is not the state variable
             H_Vm(1, :) = []; 
             h_VmLarge = reshape(H_Vm', [], 1);
-            g(obj.numGrad.G+obj.numGrad.B+1:obj.numGrad.G+obj.numGrad.B+obj.numGrad.Vm) = h_VmLarge;
+%             g(obj.numGrad.G+obj.numGrad.B+1:obj.numGrad.G+obj.numGrad.B+obj.numGrad.Vm) = h_VmLarge;
             
             % build GradientVm and lossVm
             lossThis = (obj.dataO.Vm(bus, snap) - obj.data.Vm_noised(bus, snap));
             obj.loss.Vm = obj.loss.Vm + lossThis^2 * obj.sigma.Vm(bus).^(-2);
-            gradVmThis = obj.sigma.Vm(bus).^(-2) * lossThis * g;
-            obj.gradVm = obj.gradVm + gradVmThis;
-            obj.M(:, pt) = obj.sigma.Vm(bus).^(-1) * g;
-%             HVmThis = obj.sigma.Vm(bus).^(-2) * (g * g');
-%             obj.HVm = obj.HVm + HVmThis;
+%             gradVmThis = obj.sigma.Vm(bus).^(-2) * lossThis * g;
+%             obj.gradVm = obj.gradVm + gradVmThis;
+            obj.gradVm(obj.numGrad.G+obj.numGrad.B+obj.idVmVa(bus-1)) = ...
+                obj.gradVm(obj.numGrad.G+obj.numGrad.B+obj.idVmVa(bus-1)) + obj.sigma.Vm(bus).^(-2) * lossThis;
+            obj.M(obj.numGrad.G+obj.numGrad.B+obj.idVmVa(bus-1), pt) = obj.sigma.Vm(bus).^(-1);
         end
         
         function obj = buildMeasureVa(obj, snap, bus, pt)

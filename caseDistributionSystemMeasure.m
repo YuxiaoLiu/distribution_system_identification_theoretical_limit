@@ -1786,42 +1786,24 @@ classdef caseDistributionSystemMeasure < caseDistributionSystem
         
         function obj = buildMeasureVm(obj, snap, bus, pt)
             % This method builds the measurement matrix from the measurement of Vm
-            g = zeros(obj.numGrad.Sum, 1);
-            H_Vm = zeros(obj.numBus, obj.numSnap);
-            H_Vm(bus, snap) = 1;
-            % remove the source bus whose magnitude is not the state variable
-            H_Vm(1, :) = []; 
-            h_VmLarge = reshape(H_Vm', [], 1);
-            g(obj.numGrad.G+obj.numGrad.B+1:obj.numGrad.G+obj.numGrad.B+obj.numGrad.Vm) = h_VmLarge;
             
             % build GradientVm and lossVm
             lossThis = (obj.dataO.Vm(bus, snap) - obj.data.Vm_noised(bus, snap));
             obj.loss.Vm = obj.loss.Vm + lossThis^2 * obj.sigma.Vm(bus).^(-2);
-            gradVmThis = obj.sigma.Vm(bus).^(-2) * lossThis * g;
-            obj.gradVm = obj.gradVm + gradVmThis;
-            obj.M(:, pt) = obj.sigma.Vm(bus).^(-1) * g;
-%             HVmThis = obj.sigma.Vm(bus).^(-2) * (g * g');
-%             obj.HVm = obj.HVm + HVmThis;
+            obj.gradVm(obj.numGrad.G+obj.numGrad.B+obj.idVmVa(bus-1)) = ...
+                obj.gradVm(obj.numGrad.G+obj.numGrad.B+obj.idVmVa(bus-1)) + obj.sigma.Vm(bus).^(-2) * lossThis;
+            obj.M(obj.numGrad.G+obj.numGrad.B+obj.idVmVa(bus-1), pt) = obj.sigma.Vm(bus).^(-1);
         end
         
         function obj = buildMeasureVa(obj, snap, bus, pt)
             % This method builds the measurement matrix from the measurement of Va
-            g = zeros(obj.numGrad.Sum, 1);
-            H_Va = zeros(obj.numBus, obj.numSnap);
-            H_Va(bus, snap) = 1;
-            % remove the source bus whose angle is not the state variable
-            H_Va(1, :) = []; 
-            h_VaLarge = reshape(H_Va', [], 1);
-            g(obj.numGrad.G+obj.numGrad.B+obj.numGrad.Vm+1:end) = h_VaLarge;
             
             % build HVa, GradientVa and lossVa
             lossThis = (obj.dataO.Va(bus, snap) - obj.data.Va_noised(bus, snap));
             obj.loss.Va = obj.loss.Va + lossThis^2 * obj.sigma.Va(bus).^(-2);
-            gradVaThis = obj.sigma.Va(bus).^(-2) * lossThis * g;
-            obj.gradVa = obj.gradVa + gradVaThis;
-            obj.M(:, pt) = obj.sigma.Va(bus).^(-1) * g;
-%             HVaThis = obj.sigma.Va(bus).^(-2) * (g * g');
-%             obj.HVa = obj.HVa + HVaThis;
+            obj.gradVa(obj.numGrad.G+obj.numGrad.B+obj.numGrad.Vm+obj.idVmVa(bus-1)) = ...
+                obj.gradVa(obj.numGrad.G+obj.numGrad.B+obj.numGrad.Vm+obj.idVmVa(bus-1)) + obj.sigma.Va(bus).^(-2) * lossThis;
+            obj.M(obj.numGrad.G+obj.numGrad.B+obj.numGrad.Vm+obj.idVmVa(bus-1), pt) = obj.sigma.Va(bus).^(-1);
         end
         
         function obj = buildHessian(obj)
