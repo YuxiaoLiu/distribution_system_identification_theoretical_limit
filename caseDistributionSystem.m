@@ -658,6 +658,12 @@ classdef caseDistributionSystem < handle
             % we have to derive the summation of the gradients. The name DE
             % denotes diagonal exclude, which means we consider the
             % diagonal elements as the negative summation of the rest elements.
+%             H_up = tril(H, -1)'+triu(H);
+%             n = size(H, 1);
+%             trueMat = true(n, n);
+%             trueMat = triu(trueMat, 1);
+%             h = H_up(trueMat);
+            
             H_up = tril(H, -1)'+triu(H);
             n = size(H, 1);
             N = (n - 1) * n / 2;

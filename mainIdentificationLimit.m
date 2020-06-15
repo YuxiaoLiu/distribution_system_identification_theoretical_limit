@@ -62,8 +62,8 @@ caseDS = caseDS.genOperateData;
 % set the accuracy of the measurement device, and set whether we have the
 % measurement device of a certain state
 caseDS = caseDS.setAccuracy(ratio);
-caseDS = caseDS.buildFIM;
-caseDS = caseDS.calBound;
+% caseDS = caseDS.buildFIM;
+% caseDS = caseDS.calBound;
 % caseDS = caseDS.iterateY;
 caseDS = caseDS.identifyTopo;
 caseDS = caseDS.preEvaluation(prior);

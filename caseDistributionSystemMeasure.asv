@@ -64,6 +64,8 @@ classdef caseDistributionSystemMeasure < caseDistributionSystem
         momentLoss          % the moment of loss
         
         M                   % the measurement matrix
+        numMeasure          % the number of measurements
+        idGB                % the address of G and B matrix
     end
     
     methods
@@ -1222,11 +1224,14 @@ classdef caseDistributionSystemMeasure < caseDistributionSystem
             obj.lambdaChain = zeros(1, obj.maxIter);
             obj.isGB = false;
             obj.isConverge = 0;
+            
             while (obj.iter <= obj.maxIter && obj.isConverge <= 2)
+                profile on;
                 % collect the parameter vector
                 obj = collectPar(obj);
                 % build the Hessian
                 obj = buildMeasure(obj);
+%                 obj = buildHessian(obj);
                 obj.lossChain(:, obj.iter) = ...
                     [obj.loss.total; obj.loss.P; obj.loss.Q; ...
                     obj.loss.Vm; obj.loss.Va];
@@ -1236,11 +1241,14 @@ classdef caseDistributionSystemMeasure < caseDistributionSystem
                 % update the parameters
                 obj = updateParLMPower(obj);
                 obj.iter = obj.iter + 1;
+                profile off;
+                profile viewer;
             end
             obj.lossChain(:, obj.iter:end) = [];
             obj.parChain(:, obj.iter:end) = [];
             obj.stepChain(:, obj.iter:end) = [];
             obj.lambdaChain(:, obj.iter:end) = [];
+            
         end
         
         function obj = evaluateLossMin(obj)
@@ -1603,7 +1611,8 @@ classdef caseDistributionSystemMeasure < caseDistributionSystem
             obj.H = zeros(obj.numGrad.Sum, obj.numGrad.Sum);
             obj.numMeasure = obj.numSnap *...
                 sum([obj.isMeasure.P;obj.isMeasure.Q;obj.isMeasure.Vm;obj.isMeasure.Va]);
-            obj.M = sparse(obj.numGrad.Sum, obj.numMeasure);
+            obj.M = zeros(obj.numGrad.Sum, obj.numMeasure);
+%             R = zeros(obj.numMeasure, 1);
             % Initialize the gradient matrix
             obj.grad = zeros(obj.numGrad.Sum, 1);
             obj.gradP = zeros(obj.numGrad.Sum, 1);
@@ -1616,6 +1625,16 @@ classdef caseDistributionSystemMeasure < caseDistributionSystem
             obj.loss.Q = 0;
             obj.loss.Vm = 0;
             obj.loss.Va = 0;
+            % Initialize the idGB
+            obj.idGB = zeros(obj.numBus, obj.numBus);
+            id = 1;
+            for i = 1:obj.numBus
+                obj.idGB(i, i+1:end) = id:id+obj.numBus-i-1;
+                obj.idGB(i+1:end, i) = id:id+obj.numBus-i-1;
+                id = id++obj.numBus-i;
+            end
+%             test = obj.data.G(trueGB(:, 2));
+%             test2 = obj.data.G(trueGB(2, :));
             pt = 1;
             % start the loop
             for i = 1:obj.numSnap
@@ -1634,6 +1653,7 @@ classdef caseDistributionSystemMeasure < caseDistributionSystem
                 for j = 1:obj.numBus
                     if obj.isMeasure.P(j)
                         obj = buildMeasureP(obj, i, j, GBThetaP, GBThetaQ, Pest, pt);
+%                         R(pt) = obj.sigma.P(j).^(-1);
                         pt = pt + 1;
                     end
                 end
@@ -1642,6 +1662,7 @@ classdef caseDistributionSystemMeasure < caseDistributionSystem
                 for j = 1:obj.numBus
                     if obj.isMeasure.Q(j)
                         obj = buildMeasureQ(obj, i, j, GBThetaP, GBThetaQ, Qest, pt);
+%                         R(pt) = obj.sigma.Q(j).^(-1);
                         pt = pt + 1;
                     end
                 end
@@ -1650,6 +1671,7 @@ classdef caseDistributionSystemMeasure < caseDistributionSystem
                 for j = 1:obj.numBus
                     if obj.isMeasure.Vm(j)
                         obj = buildMeasureVm(obj, i, j, pt);
+%                         R(pt) = obj.sigma.Vm(j).^(-1);
                         pt = pt + 1;
                     end
                 end
@@ -1658,6 +1680,7 @@ classdef caseDistributionSystemMeasure < caseDistributionSystem
                 for j = 1:obj.numBus
                     if obj.isMeasure.Va(j)
                         obj = buildMeasureVa(obj, i, j, pt);
+%                         R(pt) = obj.sigma.Va(j).^(-1);
                         pt = pt + 1;
                     end
                 end
@@ -1668,27 +1691,39 @@ classdef caseDistributionSystemMeasure < caseDistributionSystem
             % collect the gradients, the losses, and compute the Hessian
             obj.grad = obj.gradP + obj.gradQ + obj.gradVm + obj.gradVa;
             obj.loss.total = obj.loss.P + obj.loss.Q + obj.loss.Vm + obj.loss.Va;
-            obj.H = full();
+            Ms = sparse(obj.M);
+            obj.H = Ms * Ms';
         end
         
         function obj = buildMeasureP(obj, snap, bus, GBThetaP, GBThetaQ, Pest, pt)
             % This method builds the <ea from the measurement of P
             
             theta_ij = obj.dataO.Va(bus, snap) - obj.dataO.Va(:, snap);
-            g = sparse(obj.numGrad.Sum, 1);
+            g = zeros(obj.numGrad.Sum, 1);
             
             % G matrix
-            H_G = zeros(obj.numBus, obj.numBus);
-            H_G(bus, :) = obj.dataO.Vm(bus, snap) * obj.dataO.Vm(:, snap)' .* cos(theta_ij');
-            H_G(bus, :) = H_G(bus, :) - obj.dataO.Vm(bus, snap)^2; % the equivilance of diagonal elements
-            h_G = obj.matToColDE(H_G);
-            g(1:obj.numGrad.G) = h_G;
+%             H_G = zeros(obj.numBus, obj.numBus);
+%             H_G(bus, :) = obj.dataO.Vm(bus, snap) * obj.dataO.Vm(:, snap)' .* cos(theta_ij');
+%             H_G(bus, :) = H_G(bus, :) - obj.dataO.Vm(bus, snap)^2; % the equivilance of diagonal elements
+%             h_G = obj.matToColDE(H_G);
+            
+            h_GG = obj.dataO.Vm(bus, snap) * obj.dataO.Vm(:, snap)' .* cos(theta_ij');
+            h_GG = h_GG -  obj.dataO.Vm(bus, snap)^2;
+%             h_G = zeros(obj.numGrad.G, 1);
+%             h_G(obj.idGB(bus, [1:bus-1 bus+1:end])) = h_GG([1:bus-1 bus+1:end]);
+%             g(1:obj.numGrad.G) = h_G;
+            obj.M(obj.idGB(bus, [1:bus-1 bus+1:end]), pt) = h_GG([1:bus-1 bus+1:end]);
             
             % B matrix
-            H_B = zeros(obj.numBus, obj.numBus);
-            H_B(bus, :) = obj.dataO.Vm(bus, snap) * obj.dataO.Vm(:, snap)' .* sin(theta_ij');
-            h_B = obj.matToColDE(H_B);
-            g(obj.numGrad.G+1:obj.numGrad.G+obj.numGrad.B) = h_B;
+%             H_B = zeros(obj.numBus, obj.numBus);
+%             H_B(bus, :) = obj.dataO.Vm(bus, snap) * obj.dataO.Vm(:, snap)' .* sin(theta_ij');
+%             h_B = obj.matToColDE(H_B);
+            
+            h_BB = obj.dataO.Vm(bus, snap) * obj.dataO.Vm(:, snap)' .* sin(theta_ij');
+%             h_B = zeros(obj.numGrad.B, 1);
+%             h_B(obj.idGB(bus, [1:bus-1 bus+1:end])) = h_BB([1:bus-1 bus+1:end]);
+            g(obj.numGrad.G+obj.idGB(bus, [1:bus-1 bus+1:end])) = h_BB([1:bus-1 bus+1:end]);
+%             obj.M(obj.numGrad.G+obj.idGB(bus, [1:bus-1 bus+1:end]), pt) = h_BB([1:bus-1 bus+1:end]);
             
             % Vm
             % the first order term of other Vm
@@ -1705,46 +1740,61 @@ classdef caseDistributionSystemMeasure < caseDistributionSystem
             H_Vm(1, :) = []; 
             h_VmLarge = reshape(H_Vm', [], 1);
             g(obj.numGrad.G+obj.numGrad.B+1:obj.numGrad.G+obj.numGrad.B+obj.numGrad.Vm) = h_VmLarge;
+%             obj.M(obj.numGrad.G+obj.numGrad.B+1:obj.numGrad.G+obj.numGrad.B+obj.numGrad.Vm, pt) = h_VmLarge;
             
             % Va
             H_Va = zeros(obj.numBus, obj.numSnap);
             h_Va = obj.dataO.Vm(bus, snap) * obj.dataO.Vm(:, snap) .* GBThetaQ(:, bus);
             h_Va(bus) = - obj.dataO.Vm(bus, snap)^2 * obj.dataO.B(bus, bus)...
                        - obj.data.Q_noised(bus, snap); 
-%             h_Va(bus) = h_Va(bus)-sum(GBThetaQ(bus, :) * obj.dataO.Vm(:, snap) * obj.dataO.Vm(bus, snap));
+            h_Va(bus) = h_Va(bus)-sum(GBThetaQ(bus, :) * obj.dataO.Vm(:, snap) * obj.dataO.Vm(bus, snap));
             H_Va(:, snap) = h_Va;
             % remove the source bus whose magnitude is not the state variable
             H_Va(1, :) = []; 
             h_VaLarge = reshape(H_Va', [], 1);
             g(obj.numGrad.G+obj.numGrad.B+obj.numGrad.Vm+1:end) = h_VaLarge;
+%             obj.M(obj.numGrad.G+obj.numGrad.B+obj.numGrad.Vm+1:end, pt) = h_VaLarge;
             
             % build HP, gradP and loss.P
             lossThis = (Pest(bus) - obj.data.P_noised(bus, snap));
             obj.loss.P = obj.loss.P + lossThis^2 * obj.sigma.P(bus).^(-2);
             gradPThis = obj.sigma.P(bus).^(-2) * lossThis * g;
+%             gradPThis = obj.sigma.P(bus).^(-2) * lossThis * obj.M(:, pt);
             obj.gradP = obj.gradP + gradPThis;
+%             obj.M(:, pt) = obj.sigma.P(bus).^(-1)* obj.M(:, pt);
+%             g = obj.sigma.P(bus).^(-1) * g;
+%             assert(sum(abs(g-obj.M(:, pt))) < 1e-9);
             obj.M(:, pt) = obj.sigma.P(bus).^(-1) * g;
-%             HPThis = obj.sigma.P(bus).^(-2) * (g * g');
-%             obj.HP = obj.HP + HPThis;
         end
         
         function obj = buildMeasureQ(obj, snap, bus, GBThetaP, GBThetaQ, Qest, pt)
             % This method builds the Hessian from the measurement of Q
             
             theta_ij = obj.dataO.Va(bus, snap) - obj.dataO.Va(:, snap);
-            g = sparse(obj.numGrad.Sum, 1);
+            g = zeros(obj.numGrad.Sum, 1);
             
             % G matrix
-            H_G = zeros(obj.numBus, obj.numBus);
-            H_G(bus, :) = obj.dataO.Vm(bus, snap) * obj.dataO.Vm(:, snap)' .* sin(theta_ij');
-            h_G = obj.matToColDE(H_G);
+%             H_G = zeros(obj.numBus, obj.numBus);
+%             H_G(bus, :) = obj.dataO.Vm(bus, snap) * obj.dataO.Vm(:, snap)' .* sin(theta_ij');
+%             h_G = obj.matToColDE(H_G);
+%             g(1:obj.numGrad.G) = h_G;
+            
+            h_GG = obj.dataO.Vm(bus, snap) * obj.dataO.Vm(:, snap)' .* sin(theta_ij');
+            h_G = zeros(obj.numGrad.G, 1);
+            h_G(obj.idGB(bus, [1:bus-1 bus+1:end])) = h_GG([1:bus-1 bus+1:end]);
             g(1:obj.numGrad.G) = h_G;
             
             % B matrix
-            H_B = zeros(obj.numBus, obj.numBus);
-            H_B(bus, :) = - obj.dataO.Vm(bus, snap) * obj.dataO.Vm(:, snap)' .* cos(theta_ij');
-            H_B(bus, :) = H_B(bus, :) + obj.dataO.Vm(bus, snap)^2; % the equivilance of diagonal elements
-            h_B = obj.matToColDE(H_B);
+%             H_B = zeros(obj.numBus, obj.numBus);
+%             H_B(bus, :) = - obj.dataO.Vm(bus, snap) * obj.dataO.Vm(:, snap)' .* cos(theta_ij');
+%             H_B(bus, :) = H_B(bus, :) + obj.dataO.Vm(bus, snap)^2; % the equivilance of diagonal elements
+%             h_B = obj.matToColDE(H_B);
+%             g(obj.numGrad.G+1:obj.numGrad.G+obj.numGrad.B) = h_B;
+            
+            h_BB = - obj.dataO.Vm(bus, snap) * obj.dataO.Vm(:, snap)' .* cos(theta_ij');
+            h_BB = h_BB + obj.dataO.Vm(bus, snap)^2; % the equivilance of diagonal elements
+            h_B = zeros(obj.numGrad.B, 1);
+            h_B(obj.idGB(bus, [1:bus-1 bus+1:end])) = h_BB([1:bus-1 bus+1:end]);
             g(obj.numGrad.G+1:obj.numGrad.G+obj.numGrad.B) = h_B;
             
             % Vm
@@ -1787,8 +1837,8 @@ classdef caseDistributionSystemMeasure < caseDistributionSystem
         
         function obj = buildMeasureVm(obj, snap, bus, pt)
             % This method builds the measurement matrix from the measurement of Vm
-            g = sparse(obj.numGrad.Sum, 1);
-            H_Vm = sparse(obj.numBus, obj.numSnap);
+            g = zeros(obj.numGrad.Sum, 1);
+            H_Vm = zeros(obj.numBus, obj.numSnap);
             H_Vm(bus, snap) = 1;
             % remove the source bus whose magnitude is not the state variable
             H_Vm(1, :) = []; 
@@ -1807,8 +1857,8 @@ classdef caseDistributionSystemMeasure < caseDistributionSystem
         
         function obj = buildMeasureVa(obj, snap, bus, pt)
             % This method builds the measurement matrix from the measurement of Va
-            g = sparse(obj.numGrad.Sum, 1);
-            H_Va = sparse(obj.numBus, obj.numSnap);
+            g = zeros(obj.numGrad.Sum, 1);
+            H_Va = zeros(obj.numBus, obj.numSnap);
             H_Va(bus, snap) = 1;
             % remove the source bus whose angle is not the state variable
             H_Va(1, :) = []; 
