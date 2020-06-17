@@ -63,8 +63,6 @@ classdef caseDistributionSystemMeasure < caseDistributionSystem
         lossMin             % the theoretical minimum loss
         momentLoss          % the moment of loss
         
-        M                   % the measurement matrix
-        numMeasure          % the number of measurements
         idGB                % the address of G and B matrix
         idVmVa              % the id of Vm and Va
     end
@@ -140,54 +138,64 @@ classdef caseDistributionSystemMeasure < caseDistributionSystem
             obj.numFIM.Va = obj.numSnap * (obj.numBus - 1);
             obj.numFIM.Sum = obj.numFIM.G + obj.numFIM.B + obj.numFIM.Vm + obj.numFIM.Va;
             
-            obj.A_FIM = zeros(obj.numFIM.Sum, obj.numFIM.Sum);
-            obj.A_FIMP = sparse(obj.numFIM.Sum, obj.numFIM.Sum);
-            obj.A_FIMQ = sparse(obj.numFIM.Sum, obj.numFIM.Sum);
-            obj.FIMVm = sparse(obj.numFIM.Sum, obj.numFIM.Sum);
-            obj.FIMVa = sparse(obj.numFIM.Sum, obj.numFIM.Sum);
+            obj.numMeasure = obj.numSnap *...
+                sum([obj.isMeasure.P;obj.isMeasure.Q;obj.isMeasure.Vm;obj.isMeasure.Va]);
+            obj.M = zeros(obj.numFIM.Sum, obj.numMeasure);
+%             obj.A_FIM = zeros(obj.numFIM.Sum, obj.numFIM.Sum);
+%             obj.A_FIMP = sparse(obj.numFIM.Sum, obj.numFIM.Sum);
+%             obj.A_FIMQ = sparse(obj.numFIM.Sum, obj.numFIM.Sum);
+%             obj.FIMVm = sparse(obj.numFIM.Sum, obj.numFIM.Sum);
+%             obj.FIMVa = sparse(obj.numFIM.Sum, obj.numFIM.Sum);
             
+            pt = 1;
             % calculate the sub-matrix of P of all snapshots and all buses
             for i = 1:obj.numBus
                 if obj.isMeasure.P(i)
                     for j = 1:obj.numSnap
-                        obj = approximateFIMP(obj, i, j);
+                        obj = approximateFIMP(obj, i, j, pt);
+                        pt = pt + 1;
                     end
                 end
             end
-            obj.A_FIM = obj.A_FIM + full(obj.A_FIMP);
+%             obj.A_FIM = obj.A_FIM + full(obj.A_FIMP);
             % calculate the sub-matrix of Q of all snapshots and all buses
             for i = 1:obj.numBus
                 if obj.isMeasure.Q(i)
                     for j = 1:obj.numSnap
-                        obj = approximateFIMQ(obj, i, j);
+                        obj = approximateFIMQ(obj, i, j, pt);
+                        pt = pt + 1;
                     end
                 end
             end
-            obj.A_FIM = obj.A_FIM + full(obj.A_FIMQ);
+%             obj.A_FIM = obj.A_FIM + full(obj.A_FIMQ);
             % calculate the sub-matrix of Vm of all snapshots and all buses
             for i = 1:obj.numBus
                 if obj.isMeasure.Vm(i)
                     for j = 1:obj.numSnap
-                        obj = buildFIMVm(obj, i, j);
+                        obj = buildFIMVm(obj, i, j, pt);
+                        pt = pt + 1;
                     end
                 end
             end
-            obj.A_FIM = obj.A_FIM + full(obj.FIMVm);
+%             obj.A_FIM = obj.A_FIM + full(obj.FIMVm);
             % calculate the sub-matrix of Va of all snapshots and all buses
             for i = 1:obj.numBus
                 if obj.isMeasure.Va(i)
                     for j = 1:obj.numSnap
-                        obj = buildFIMVa(obj, i, j);
+                        obj = buildFIMVa(obj, i, j, pt);
+                        pt = pt + 1;
                     end
                 end
             end
-            obj.A_FIM = obj.A_FIM + full(obj.FIMVa);
+%             obj.A_FIM = obj.A_FIM + full(obj.FIMVa);
+            Ms = sparse(obj.M);
+            obj.A_FIM = Ms * Ms';
         end
         
-        function obj = approximateFIMP(obj, bus, snap)
+        function obj = approximateFIMP(obj, bus, snap, pt)
             % This method approximate the P part of FIM. We ignore the sin
             % part of the power flow equations.
-            h = sparse(obj.numFIM.Sum, 1);
+            h = zeros(obj.numFIM.Sum, 1);
             theta_ij = obj.dataE.Va(bus, snap) - obj.dataE.Va(:, snap);
 %             Theta_ij = repmat(obj.dataE.Va(:, snap), 1, obj.numBus) - repmat(obj.dataE.Va(:, snap)', obj.numBus, 1);
 %             % G_ij\cos(\Theta_ij)+B_ij\sin(\Theta_ij)
@@ -235,14 +243,15 @@ classdef caseDistributionSystemMeasure < caseDistributionSystem
             
             % build FIMP
             h = h / obj.sigma.P(bus);
-            FIMPThis = h * h';
-            obj.A_FIMP = obj.A_FIMP + FIMPThis;
+            obj.M(:, pt) = h;
+%             FIMPThis = h * h';
+%             obj.A_FIMP = obj.A_FIMP + FIMPThis;
         end
         
-        function obj = approximateFIMQ(obj, bus, snap)
+        function obj = approximateFIMQ(obj, bus, snap, pt)
             % This method approximate the Q part of FIM. We ignore the sin
             % part of the power flow equations.
-            h = sparse(obj.numFIM.Sum, 1);
+            h = zeros(obj.numFIM.Sum, 1);
             theta_ij = obj.dataE.Va(bus, snap) - obj.dataE.Va(:, snap);
 %             Theta_ij = repmat(obj.dataE.Va(:, snap), 1, obj.numBus) - repmat(obj.dataE.Va(:, snap)', obj.numBus, 1);
 %             % G_ij\cos(\Theta_ij)+B_ij\sin(\Theta_ij)
@@ -290,8 +299,9 @@ classdef caseDistributionSystemMeasure < caseDistributionSystem
             
             % build FIMQ
             h = h / obj.sigma.Q(bus);
-            FIMQThis = h * h';
-            obj.A_FIMQ = obj.A_FIMQ + FIMQThis;
+            obj.M(:, pt) = h;
+%             FIMQThis = h * h';
+%             obj.A_FIMQ = obj.A_FIMQ + FIMQThis;
         end
         
         function obj = calABound(obj, varargin)
@@ -324,7 +334,7 @@ classdef caseDistributionSystemMeasure < caseDistributionSystem
                 cov = obj.A_FIM(obj.numFIM.index, obj.numFIM.index)\eye(sum(obj.numFIM.index));
                 var = diag(cov);
             else
-                cov = obj.A_FIM(obj.numFIM.index, obj.numFIM.index)\eye(sum(obj.numFIM.index));
+                cov = full(obj.A_FIM(obj.numFIM.index, obj.numFIM.index))\eye(sum(obj.numFIM.index));
                 var = diag(cov);
 %                 % we construct a Hermitian matrix H and use Cholesky
 %                 % decomposition to compute the inverse matrix
@@ -659,7 +669,10 @@ classdef caseDistributionSystemMeasure < caseDistributionSystem
                 % collect the paramter vector
                 obj = collectPar(obj);
                 % build the gradient
+%                 profile on;
                 obj = buildGradient(obj);
+%                 profile off;
+%                 profile viewer;
                 % implement the re-weight techique.
                 obj = tuneGradient(obj);
                 % update the chains
@@ -715,6 +728,15 @@ classdef caseDistributionSystemMeasure < caseDistributionSystem
             obj.loss.Vm = 0;
             obj.loss.Va = 0;
             
+            % Initialize the idGB
+            obj.idGB = zeros(obj.numBus, obj.numBus);
+            id = 1;
+            for i = 1:obj.numBus
+                obj.idGB(i, i+1:end) = id:id+obj.numBus-i-1;
+                obj.idGB(i+1:end, i) = id:id+obj.numBus-i-1;
+                id = id+obj.numBus-i;
+            end
+            
             for i = 1:obj.numSnap
                 % calculate some basic parameters at present state
                 Theta_ij = repmat(obj.dataO.Va(:, i), 1, obj.numBus) - repmat(obj.dataO.Va(:, i)', obj.numBus, 1);
@@ -726,6 +748,8 @@ classdef caseDistributionSystemMeasure < caseDistributionSystem
                 Pest = (GBThetaP * obj.dataO.Vm(:, i)) .* obj.dataO.Vm(:, i);
                 % Q estimate
                 Qest = (GBThetaQ * obj.dataO.Vm(:, i)) .* obj.dataO.Vm(:, i);
+                % the id of Vm and Va
+                obj.idVmVa = obj.numSnap * (0:obj.numBus-2) + i;
                 
                 % calculate the sub-vector of P of all buses
                 for j = 1:obj.numBus
@@ -765,24 +789,19 @@ classdef caseDistributionSystemMeasure < caseDistributionSystem
             % This method builds the gradient from the measurement of P
             
             theta_ij = obj.dataO.Va(bus, snap) - obj.dataO.Va(:, snap);
-            g = sparse(obj.numGrad.Sum, 1);
+            g = zeros(obj.numGrad.Sum, 1);
             
             % G matrix
-            H_G = zeros(obj.numBus, obj.numBus);
-            H_G(bus, :) = obj.dataO.Vm(bus, snap) * obj.dataO.Vm(:, snap)' .* cos(theta_ij');
-            H_G(bus, :) = H_G(bus, :) - obj.dataO.Vm(bus, snap)^2; % the equivilance of diagonal elements
-            h_G = obj.matToColDE(H_G);
-            g(1:obj.numGrad.G) = h_G;
+            h_GG = obj.dataO.Vm(bus, snap) * obj.dataO.Vm(:, snap)' .* cos(theta_ij');
+            h_GG = h_GG -  obj.dataO.Vm(bus, snap)^2;
+            g(obj.idGB(bus, [1:bus-1 bus+1:end])) = h_GG([1:bus-1 bus+1:end]);
             
             % B matrix
-            H_B = zeros(obj.numBus, obj.numBus);
-            H_B(bus, :) = obj.dataO.Vm(bus, snap) * obj.dataO.Vm(:, snap)' .* sin(theta_ij');
-            h_B = obj.matToColDE(H_B);
-            g(obj.numGrad.G+1:obj.numGrad.G+obj.numGrad.B) = h_B;
+            h_BB = obj.dataO.Vm(bus, snap) * obj.dataO.Vm(:, snap)' .* sin(theta_ij');
+            g(obj.numGrad.G+obj.idGB(bus, [1:bus-1 bus+1:end])) = h_BB([1:bus-1 bus+1:end]);
             
             % Vm
             % the first order term of other Vm
-            H_Vm = zeros(obj.numBus, obj.numSnap);
             h_Vm = obj.dataO.Vm(bus, snap) * GBThetaP(:, bus);
             % the second order term of Vm(bus)
             h_Vm(bus) = 2*obj.dataO.Vm(bus, snap) * GBThetaP(bus, bus);
@@ -790,24 +809,14 @@ classdef caseDistributionSystemMeasure < caseDistributionSystem
             fOrderVm = obj.dataO.Vm(:, snap) .* GBThetaP(:, bus);
             fOrderVm(bus) = 0;
             h_Vm(bus) = h_Vm(bus) + sum(fOrderVm);
-            H_Vm(:, snap) = h_Vm;
-            % remove the source bus whose magnitude is not the state variable
-            H_Vm(1, :) = []; 
-            h_VmLarge = reshape(H_Vm', [], 1);
-            g(obj.numGrad.G+obj.numGrad.B+1:obj.numGrad.G+obj.numGrad.B+obj.numGrad.Vm) = h_VmLarge;
+            g(obj.numGrad.G+obj.numGrad.B+obj.idVmVa) = h_Vm(2:end);
             
             % Va
-            H_Va = zeros(obj.numBus, obj.numSnap);
             h_Va = obj.dataO.Vm(bus, snap) * obj.dataO.Vm(:, snap) .* GBThetaQ(:, bus);
             h_Va(bus) = - obj.dataO.Vm(bus, snap)^2 * obj.dataO.B(bus, bus)...
                        - obj.data.Q_noised(bus, snap); 
-%             h_Va(bus) = h_Va(bus)-sum(GBThetaQ(bus, :) * obj.dataO.Vm(:, snap) * obj.dataO.Vm(bus, snap));
-            H_Va(:, snap) = h_Va;
-%             assert (H_Va(bus, snap) > 0)
-            % remove the source bus whose magnitude is not the state variable
-            H_Va(1, :) = []; 
-            h_VaLarge = reshape(H_Va', [], 1);
-            g(obj.numGrad.G+obj.numGrad.B+obj.numGrad.Vm+1:end) = h_VaLarge;
+            h_Va(bus) = h_Va(bus)-sum(GBThetaQ(bus, :) * obj.dataO.Vm(:, snap) * obj.dataO.Vm(bus, snap));
+            g(obj.numGrad.G+obj.numGrad.B+obj.numGrad.Vm+obj.idVmVa) = h_Va(2:end);
             
             % build GradientP and loss.P
             lossThis = (Pest(bus) - obj.data.P_noised(bus, snap));
@@ -820,7 +829,7 @@ classdef caseDistributionSystemMeasure < caseDistributionSystem
             % This method builds the gradient from the measurement of Q
             
             theta_ij = obj.dataO.Va(bus, snap) - obj.dataO.Va(:, snap);
-            g = sparse(obj.numGrad.Sum, 1);
+            g = zeros(obj.numGrad.Sum, 1);
             
             % G matrix
             H_G = zeros(obj.numBus, obj.numBus);
@@ -1227,6 +1236,7 @@ classdef caseDistributionSystemMeasure < caseDistributionSystem
             obj.isConverge = 0;
             
             while (obj.iter <= obj.maxIter && obj.isConverge <= 2)
+                disp(obj.iter);
 %                 profile on;
                 % collect the parameter vector
                 obj = collectPar(obj);
@@ -1631,7 +1641,7 @@ classdef caseDistributionSystemMeasure < caseDistributionSystem
             for i = 1:obj.numBus
                 obj.idGB(i, i+1:end) = id:id+obj.numBus-i-1;
                 obj.idGB(i+1:end, i) = id:id+obj.numBus-i-1;
-                id = id++obj.numBus-i;
+                id = id+obj.numBus-i;
             end
             pt = 1;
             
@@ -1786,19 +1796,10 @@ classdef caseDistributionSystemMeasure < caseDistributionSystem
         
         function obj = buildMeasureVm(obj, snap, bus, pt)
             % This method builds the measurement matrix from the measurement of Vm
-            g = zeros(obj.numGrad.Sum, 1);
-            H_Vm = zeros(obj.numBus, obj.numSnap);
-            H_Vm(bus, snap) = 1;
-            % remove the source bus whose magnitude is not the state variable
-            H_Vm(1, :) = []; 
-            h_VmLarge = reshape(H_Vm', [], 1);
-%             g(obj.numGrad.G+obj.numGrad.B+1:obj.numGrad.G+obj.numGrad.B+obj.numGrad.Vm) = h_VmLarge;
             
             % build GradientVm and lossVm
             lossThis = (obj.dataO.Vm(bus, snap) - obj.data.Vm_noised(bus, snap));
             obj.loss.Vm = obj.loss.Vm + lossThis^2 * obj.sigma.Vm(bus).^(-2);
-%             gradVmThis = obj.sigma.Vm(bus).^(-2) * lossThis * g;
-%             obj.gradVm = obj.gradVm + gradVmThis;
             obj.gradVm(obj.numGrad.G+obj.numGrad.B+obj.idVmVa(bus-1)) = ...
                 obj.gradVm(obj.numGrad.G+obj.numGrad.B+obj.idVmVa(bus-1)) + obj.sigma.Vm(bus).^(-2) * lossThis;
             obj.M(obj.numGrad.G+obj.numGrad.B+obj.idVmVa(bus-1), pt) = obj.sigma.Vm(bus).^(-1);
@@ -1806,22 +1807,13 @@ classdef caseDistributionSystemMeasure < caseDistributionSystem
         
         function obj = buildMeasureVa(obj, snap, bus, pt)
             % This method builds the measurement matrix from the measurement of Va
-            g = zeros(obj.numGrad.Sum, 1);
-            H_Va = zeros(obj.numBus, obj.numSnap);
-            H_Va(bus, snap) = 1;
-            % remove the source bus whose angle is not the state variable
-            H_Va(1, :) = []; 
-            h_VaLarge = reshape(H_Va', [], 1);
-            g(obj.numGrad.G+obj.numGrad.B+obj.numGrad.Vm+1:end) = h_VaLarge;
             
             % build HVa, GradientVa and lossVa
             lossThis = (obj.dataO.Va(bus, snap) - obj.data.Va_noised(bus, snap));
             obj.loss.Va = obj.loss.Va + lossThis^2 * obj.sigma.Va(bus).^(-2);
-            gradVaThis = obj.sigma.Va(bus).^(-2) * lossThis * g;
-            obj.gradVa = obj.gradVa + gradVaThis;
-            obj.M(:, pt) = obj.sigma.Va(bus).^(-1) * g;
-%             HVaThis = obj.sigma.Va(bus).^(-2) * (g * g');
-%             obj.HVa = obj.HVa + HVaThis;
+            obj.gradVa(obj.numGrad.G+obj.numGrad.B+obj.numGrad.Vm+obj.idVmVa(bus-1)) = ...
+                obj.gradVa(obj.numGrad.G+obj.numGrad.B+obj.numGrad.Vm+obj.idVmVa(bus-1)) + obj.sigma.Va(bus).^(-2) * lossThis;
+            obj.M(obj.numGrad.G+obj.numGrad.B+obj.numGrad.Vm+obj.idVmVa(bus-1), pt) = obj.sigma.Va(bus).^(-1);
         end
         
         function obj = buildHessian(obj)
