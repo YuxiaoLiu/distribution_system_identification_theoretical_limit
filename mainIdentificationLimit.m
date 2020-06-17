@@ -62,22 +62,22 @@ caseDS = caseDS.genOperateData;
 % set the accuracy of the measurement device, and set whether we have the
 % measurement device of a certain state
 caseDS = caseDS.setAccuracy(ratio);
-profile on
-caseDS = caseDS.buildFIM;
-caseDS = caseDS.calBound;
+% profile on
+% caseDS = caseDS.buildFIM;
+% caseDS = caseDS.calBound;
 % caseDS = caseDS.iterateY;
 caseDS = caseDS.identifyTopo;
 caseDS = caseDS.preEvaluation(prior);
 caseDS = caseDS.approximateFIM(k);
 caseDS = caseDS.calABound;
-profile off
-profile viewer
+% profile off
+% profile viewer
 % caseDS = caseDS.initValue;
 % caseDS = caseDS.identifyMCMCEIO;
 % caseDS = caseDS.identifyMCMCEIV;
 % caseDS = caseDS.identifyOptNLP;
-% caseDS = caseDS.identifyOptGradient;
-caseDS = caseDS.identifyOptLMPower;
+caseDS = caseDS.identifyOptGradient;
+% caseDS = caseDS.identifyOptLMPower;
 % caseDS = caseDS.identifyOptNewton;
 % caseDS = caseDS.buildFIM(k);
 % caseDS = caseDS.updateTopo(topoTol, admittanceOnly);
