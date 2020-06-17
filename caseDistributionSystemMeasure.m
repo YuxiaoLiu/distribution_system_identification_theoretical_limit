@@ -632,11 +632,11 @@ classdef caseDistributionSystemMeasure < caseDistributionSystem
             obj.maxIter = 2000;
             obj.step = 1;
             obj.stepMax = 2;
-            obj.stepMin = 0.0001;
+            obj.stepMin = 1e-4;
             obj.momentRatio = 0.9;
             obj.updateStepFreq = 20;
             obj.vmvaWeight = 1;
-            obj.momentRatioMax = 0.9;
+            obj.momentRatioMax = 0.95;
             obj.momentRatioMin = 0.9;
             obj.kZero = 0.0005;
             
