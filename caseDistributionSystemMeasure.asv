@@ -62,9 +62,13 @@ classdef caseDistributionSystemMeasure < caseDistributionSystem
         gradPast            % the gradient of the last step
         lossMin             % the theoretical minimum loss
         momentLoss          % the moment of loss
+        ratioMax            % the ratio of second order / first order (final value)
         
         idGB                % the address of G and B matrix
         idVmVa              % the id of Vm and Va
+        isBoundChain        % if attain the bound that Hessian is too large
+        deRatio             % ratio of step and lambda when loss decreases
+        inRatio             % ratio of step and lambda when loss increases
     end
     
     methods
@@ -152,8 +156,11 @@ classdef caseDistributionSystemMeasure < caseDistributionSystem
             for i = 1:obj.numBus
                 if obj.isMeasure.P(i)
                     for j = 1:obj.numSnap
+                        profile on
                         obj = approximateFIMP(obj, i, j, pt);
                         pt = pt + 1;
+                        profile off
+                        profile vei
                     end
                 end
             end
@@ -1159,15 +1166,18 @@ classdef caseDistributionSystemMeasure < caseDistributionSystem
             % This function identify the topology and the parameters using
             % the LM-based strategy and the knowledge of power flow
             % equations
-            obj.lambda = 1e3; % the proportion of first order gradient
-            obj.lambdaMin = 1e-3;
-            obj.lambdaMax = 1e3;
+            obj.lambda = 1e2; % the proportion of first order gradient
+            obj.lambdaMin = 1e-2;
+            obj.lambdaMax = 1e2;
+            obj.ratioMax = 1e3; % the ratio of second order / first order (final value)
             
-            obj.step = 1;
+            obj.step = 1e-2;
             obj.stepMin = 1e-4;
             obj.stepMax = 2;
+            obj.deRatio = 1.1;
+            obj.inRatio = 2;
             
-            obj.maxIter = 3000;
+            obj.maxIter = 2000;
             obj.thsTopo = 0.01;
             obj.Topo = true(obj.numBus, obj.numBus);
             obj.Tvec = logical(obj.matOfColDE(obj.Topo));
@@ -1204,6 +1214,7 @@ classdef caseDistributionSystemMeasure < caseDistributionSystem
             obj.parChain = zeros(obj.numGrad.Sum, obj.maxIter);
             obj.stepChain = zeros(1, obj.maxIter);
             obj.lambdaChain = zeros(1, obj.maxIter);
+            obj.isBoundChain = false(1, obj.maxIter);
             obj.isGB = false;
             obj.isConverge = 0;
             
@@ -1247,23 +1258,34 @@ classdef caseDistributionSystemMeasure < caseDistributionSystem
             
             % we update all the parameters together
             id = 1:obj.numGrad.Sum;
+            id_GB = 1:obj.numGrad.G+obj.numGrad.B;
             try
                 moment = obj.gradPast * obj.momentRatio + obj.grad * (1-obj.momentRatio);
             catch
                 moment = obj.grad;
             end
+%             obj.gradPast = moment;
+%             delta1 = obj.step * moment(id);
+% %             delta1 = moment(id);
+%             delta2 = obj.H(id, id) \ obj.gradOrigin(id);
+%             delta = delta1 * obj.lambda/(1+obj.lambda) + delta2 * 1/(1+obj.lambda);
+
             obj.gradPast = moment;
             delta1 = obj.step * moment(id);
-%             delta1 = moment(id);
             delta2 = obj.H(id, id) \ obj.gradOrigin(id);
+            maxD1 = max(abs(delta1(id_GB)));
+            maxD2 = max(abs(delta2(id_GB)));
+            ratio = maxD2 / maxD1;
+            disp(ratio);
+            if ratio > obj.lambda * obj.ratioMax
+                obj.lambda = 100 * ratio / obj.ratioMax;
+                obj.isBoundChain(obj.iter) = true;
+            end
             delta = delta1 * obj.lambda/(1+obj.lambda) + delta2 * 1/(1+obj.lambda);
-%             delta = delta * obj.step;
 
 %             H1 = moment * obj.lambda + obj.H;
 %             delta = H1(id, id) \ obj.gradOrigin(id);
             par = zeros(obj.numGrad.Sum, 1);
-            
-            
             
             par(id) = obj.parChain(id, obj.iter) - delta(id);
             G = par(1:obj.numGrad.G);
@@ -1321,16 +1343,20 @@ classdef caseDistributionSystemMeasure < caseDistributionSystem
             try % I think we should use PD control here, currently it is only D control
                 if obj.lossChain(1, obj.iter) < obj.lossChain(1, obj.iter-1)
 %                     ratio = (obj.lossChain(1, obj.iter-1) / obj.lossChain(1, obj.iter));
-                    obj.lambda = max(obj.lambda / 1.1, obj.lambdaMin);
-                    obj.step = min(obj.step * 1.1, obj.stepMax);
+                    obj.lambda = max(obj.lambda / obj.deRatio, obj.lambdaMin);
+                    obj.lambda = min(obj.lambda, obj.lambdaMax);
+                    obj.step = min(obj.step * obj.deRatio, obj.stepMax);
                 else
 %                     ratio = (obj.lossChain(1, obj.iter) / obj.lossChain(1, obj.iter-1))^2;
-                    ratio = log10(max(obj.loss.total, obj.lossMin * 10) / obj.lossMin);
-                    dRatio = 10/ratio;
-                    obj.lambda = min(obj.lambda * (1.1+dRatio), obj.lambdaMax);
-%                     dRatio = 0.5;
-                    obj.lambda = min(obj.lambda * (1.1+dRatio), obj.lambdaMax);
-                    obj.step = max(obj.step / (1.1+dRatio), obj.stepMin);
+                    
+                    obj.lambda = min(obj.lambda * obj.inRatio, obj.lambdaMax);
+                    obj.step = max(obj.step / obj.inRatio, obj.stepMin);
+
+%                     ratio = log10(max(obj.loss.total, obj.lossMin * 10) / obj.lossMin);
+%                     dRatio = 10/ratio;
+%                     obj.lambda = min(obj.lambda * (1.1+dRatio), obj.lambdaMax);
+%                     obj.step = max(obj.step / (1.1+dRatio), obj.stepMin);
+                    
                 end
             catch
             end
