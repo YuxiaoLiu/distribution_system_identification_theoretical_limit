@@ -637,7 +637,7 @@ classdef caseDistributionSystemMeasure < caseDistributionSystem
             % knowledge into the process because we know the ground truth
             % value.
             obj.maxIter = 2000;
-            obj.step = 1;
+            obj.step = 1e-4;
             obj.stepMax = 2;
             obj.stepMin = 1e-4;
             obj.momentRatio = 0.9;
@@ -1282,7 +1282,7 @@ classdef caseDistributionSystemMeasure < caseDistributionSystem
                 obj.isBoundChain(obj.iter) = true;
             end
             delta = delta1 * obj.lambda/(1+obj.lambda) + delta2 * 1/(1+obj.lambda);
-
+            obj.lambdaChain(obj.iter) = obj.lambda;
 %             H1 = moment * obj.lambda + obj.H;
 %             delta = H1(id, id) \ obj.gradOrigin(id);
             par = zeros(obj.numGrad.Sum, 1);
@@ -1372,13 +1372,12 @@ classdef caseDistributionSystemMeasure < caseDistributionSystem
 %             else
 %                 obj.momentLoss = obj.loss.total;
 %             end
-            obj.lambdaChain(obj.iter) = obj.lambda;
             obj.stepChain(obj.iter) = obj.step;
 %             obj.lambdaMax = log10(max(obj.loss.total, obj.lossMin * 10) / obj.lossMin) * 1000;
             % converge or not
-%             if obj.loss.total < obj.lossMin
-%                 obj.isConverge = 3;
-%             end
+            if obj.loss.total < obj.lossMin
+                obj.isConverge = 3;
+            end
         end
         
         function obj = buildJacobian(obj)
