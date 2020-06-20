@@ -63,6 +63,7 @@ classdef caseDistributionSystemMeasure < caseDistributionSystem
         lossMin             % the theoretical minimum loss
         momentLoss          % the moment of loss
         ratioMax            % the ratio of second order / first order (final value)
+        lambdaCompen        % the additional compensate when second order is too large
         
         idGB                % the address of G and B matrix
         idVmVa              % the id of Vm and Va
@@ -156,11 +157,11 @@ classdef caseDistributionSystemMeasure < caseDistributionSystem
             for i = 1:obj.numBus
                 if obj.isMeasure.P(i)
                     for j = 1:obj.numSnap
-                        profile on
+%                         profile on
                         obj = approximateFIMP(obj, i, j, pt);
                         pt = pt + 1;
-                        profile off
-                        profile vei
+%                         profile off
+%                         profile viewer
                     end
                 end
             end
@@ -637,7 +638,7 @@ classdef caseDistributionSystemMeasure < caseDistributionSystem
             % knowledge into the process because we know the ground truth
             % value.
             obj.maxIter = 2000;
-            obj.step = 1;
+            obj.step = 1e-4;
             obj.stepMax = 2;
             obj.stepMin = 1e-4;
             obj.momentRatio = 0.9;
@@ -823,7 +824,7 @@ classdef caseDistributionSystemMeasure < caseDistributionSystem
             h_Va = obj.dataO.Vm(bus, snap) * obj.dataO.Vm(:, snap) .* GBThetaQ(:, bus);
             h_Va(bus) = - obj.dataO.Vm(bus, snap)^2 * obj.dataO.B(bus, bus)...
                        - obj.data.Q_noised(bus, snap); 
-            h_Va(bus) = h_Va(bus)-sum(GBThetaQ(bus, :) * obj.dataO.Vm(:, snap) * obj.dataO.Vm(bus, snap));
+%             h_Va(bus) = h_Va(bus)-sum(GBThetaQ(bus, :) * obj.dataO.Vm(:, snap) * obj.dataO.Vm(bus, snap));
             g(obj.numGrad.G+obj.numGrad.B+obj.numGrad.Vm+obj.idVmVa) = h_Va(2:end);
             
             % build GradientP and loss.P
@@ -1168,22 +1169,24 @@ classdef caseDistributionSystemMeasure < caseDistributionSystem
             % equations
             obj.lambda = 1e2; % the proportion of first order gradient
             obj.lambdaMin = 1e-2;
-            obj.lambdaMax = 1e2;
-            obj.ratioMax = 1e3; % the ratio of second order / first order (final value)
+            obj.lambdaMax = 1;%1e1;
+            obj.ratioMax = 1e; % the ratio of second order / first order (final value)
+            obj.lambdaCompen = 1e2; % the additional compensate when second order is too large
             
-            obj.step = 1e-2;
+            obj.step = 1e-4;
             obj.stepMin = 1e-4;
             obj.stepMax = 2;
             obj.deRatio = 1.1;
             obj.inRatio = 2;
             
-            obj.maxIter = 2000;
+            obj.maxIter = 1000;
             obj.thsTopo = 0.01;
             obj.Topo = true(obj.numBus, obj.numBus);
             obj.Tvec = logical(obj.matOfColDE(obj.Topo));
             obj.vmvaWeight = 1;
             
             obj.momentRatio = 0.9;
+            obj.momentRatioMax = 0.9;
             
             % we first initialize the data
             obj.dataO.G = obj.dataE.G;
@@ -1278,11 +1281,11 @@ classdef caseDistributionSystemMeasure < caseDistributionSystem
             ratio = maxD2 / maxD1;
             disp(ratio);
             if ratio > obj.lambda * obj.ratioMax
-                obj.lambda = 100 * ratio / obj.ratioMax;
+                obj.lambda = obj.lambdaCompen * ratio / obj.ratioMax;
                 obj.isBoundChain(obj.iter) = true;
             end
             delta = delta1 * obj.lambda/(1+obj.lambda) + delta2 * 1/(1+obj.lambda);
-
+            obj.lambdaChain(obj.iter) = obj.lambda;
 %             H1 = moment * obj.lambda + obj.H;
 %             delta = H1(id, id) \ obj.gradOrigin(id);
             par = zeros(obj.numGrad.Sum, 1);
@@ -1346,9 +1349,9 @@ classdef caseDistributionSystemMeasure < caseDistributionSystem
                     obj.lambda = max(obj.lambda / obj.deRatio, obj.lambdaMin);
                     obj.lambda = min(obj.lambda, obj.lambdaMax);
                     obj.step = min(obj.step * obj.deRatio, obj.stepMax);
+                    obj.momentRatio = min(obj.momentRatio * obj.inRatio, obj.momentRatioMax);
                 else
 %                     ratio = (obj.lossChain(1, obj.iter) / obj.lossChain(1, obj.iter-1))^2;
-                    
                     obj.lambda = min(obj.lambda * obj.inRatio, obj.lambdaMax);
                     obj.step = max(obj.step / obj.inRatio, obj.stepMin);
 
@@ -1372,13 +1375,12 @@ classdef caseDistributionSystemMeasure < caseDistributionSystem
 %             else
 %                 obj.momentLoss = obj.loss.total;
 %             end
-            obj.lambdaChain(obj.iter) = obj.lambda;
             obj.stepChain(obj.iter) = obj.step;
 %             obj.lambdaMax = log10(max(obj.loss.total, obj.lossMin * 10) / obj.lossMin) * 1000;
             % converge or not
-            if obj.loss.total < obj.lossMin
-                obj.isConverge = 3;
-            end
+%             if obj.loss.total < obj.lossMin
+%                 obj.isConverge = 3;
+%             end
         end
         
         function obj = buildJacobian(obj)
@@ -1723,19 +1725,21 @@ classdef caseDistributionSystemMeasure < caseDistributionSystem
             % Vm
             % the first order term of other Vm
             h_Vm = obj.dataO.Vm(bus, snap) * GBThetaP(:, bus);
-            % the second order term of Vm(bus)
-            h_Vm(bus) = 2*obj.dataO.Vm(bus, snap) * GBThetaP(bus, bus);
-            % the first order term of Vm(bus)
-            fOrderVm = obj.dataO.Vm(:, snap) .* GBThetaP(:, bus);
-            fOrderVm(bus) = 0;
-            h_Vm(bus) = h_Vm(bus) + sum(fOrderVm);
+%             % the second order term of Vm(bus)
+%             h_Vm(bus) = 2*obj.dataO.Vm(bus, snap) * GBThetaP(bus, bus);
+%             % the first order term of Vm(bus)
+%             fOrderVm = obj.dataO.Vm(:, snap) .* GBThetaP(:, bus);
+%             fOrderVm(bus) = 0;
+%             h_Vm(bus) = h_Vm(bus) + sum(fOrderVm);
+            h_Vm(bus) = obj.dataO.G(bus, bus) * obj.dataO.Vm(bus, snap) ...
+                + obj.data.P_noised(bus, snap) / obj.dataO.Vm(bus, snap);
             g(obj.numGrad.G+obj.numGrad.B+obj.idVmVa) = h_Vm(2:end);
             
             % Va
             h_Va = obj.dataO.Vm(bus, snap) * obj.dataO.Vm(:, snap) .* GBThetaQ(:, bus);
             h_Va(bus) = - obj.dataO.Vm(bus, snap)^2 * obj.dataO.B(bus, bus)...
                        - obj.data.Q_noised(bus, snap); 
-            h_Va(bus) = h_Va(bus)-sum(GBThetaQ(bus, :) * obj.dataO.Vm(:, snap) * obj.dataO.Vm(bus, snap));
+%             h_Va(bus) = h_Va(bus)-sum(GBThetaQ(bus, :) * obj.dataO.Vm(:, snap) * obj.dataO.Vm(bus, snap));
             g(obj.numGrad.G+obj.numGrad.B+obj.numGrad.Vm+obj.idVmVa) = h_Va(2:end);
             
             % build HP, gradP and loss.P
@@ -1768,12 +1772,14 @@ classdef caseDistributionSystemMeasure < caseDistributionSystem
             % Vm
             % the first order term of other Vm
             h_Vm = obj.dataO.Vm(bus, snap) * GBThetaQ(:, bus);
-            % the second order term of Vm(bus)
-            h_Vm(bus) = 2*obj.dataO.Vm(bus, snap) * GBThetaQ(bus, bus);
-            % the first order term of Vm(bus)
-            fOrderVm = obj.dataO.Vm(:, snap) .* GBThetaQ(:, bus);
-            fOrderVm(bus) = 0;
-            h_Vm(bus) = h_Vm(bus) + sum(fOrderVm);
+%             % the second order term of Vm(bus)
+%             h_Vm(bus) = 2*obj.dataO.Vm(bus, snap) * GBThetaQ(bus, bus);
+%             % the first order term of Vm(bus)
+%             fOrderVm = obj.dataO.Vm(:, snap) .* GBThetaQ(:, bus);
+%             fOrderVm(bus) = 0;
+%             h_Vm(bus) = h_Vm(bus) + sum(fOrderVm);
+            h_Vm(bus) = - obj.dataO.B(bus, bus) * obj.dataO.Vm(bus, snap) ...
+                + obj.data.Q_noised(bus, snap) / obj.dataO.Vm(bus, snap);
             g(obj.numGrad.G+obj.numGrad.B+obj.idVmVa) = h_Vm(2:end);
             
             % Va
