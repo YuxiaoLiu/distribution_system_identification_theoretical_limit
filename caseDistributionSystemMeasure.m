@@ -63,6 +63,9 @@ classdef caseDistributionSystemMeasure < caseDistributionSystem
         lossMin             % the theoretical minimum loss
         momentLoss          % the moment of loss
         ratioMax            % the ratio of second order / first order (final value)
+        ratioMaxMax         % the maximum of ratioMax
+        ratioMaxMin         % the minimum of ratioMin
+        ratioMaxChain       % the chain of ratioMax
         lambdaCompen        % the additional compensate when second order is too large
         
         idGB                % the address of G and B matrix
@@ -1170,7 +1173,9 @@ classdef caseDistributionSystemMeasure < caseDistributionSystem
             obj.lambda = 1e2; % the proportion of first order gradient
             obj.lambdaMin = 1e-2;
             obj.lambdaMax = 1;%1e1;
-            obj.ratioMax = 1e3; % the ratio of second order / first order (final value)
+            obj.ratioMax = 1e5; % the ratio of second order / first order (final value)
+            obj.ratioMaxMax = 1e5;
+            obj.ratioMaxMin = 1e5;
             obj.lambdaCompen = 1e2; % the additional compensate when second order is too large 1e2
             
             obj.step = 1e-4;
@@ -1218,6 +1223,7 @@ classdef caseDistributionSystemMeasure < caseDistributionSystem
             obj.stepChain = zeros(1, obj.maxIter);
             obj.lambdaChain = zeros(1, obj.maxIter);
             obj.isBoundChain = false(1, obj.maxIter);
+            obj.ratioMaxChain = zeros(1, obj.maxIter);
             obj.isGB = false;
             obj.isConverge = 0;
             
@@ -1245,6 +1251,7 @@ classdef caseDistributionSystemMeasure < caseDistributionSystem
             obj.parChain(:, obj.iter:end) = [];
             obj.stepChain(:, obj.iter:end) = [];
             obj.lambdaChain(:, obj.iter:end) = [];
+            obj.ratioMaxChain(:, obj.iter:end) = [];
             
         end
         
@@ -1279,7 +1286,7 @@ classdef caseDistributionSystemMeasure < caseDistributionSystem
             maxD1 = max(abs(delta1(id_GB)));
             maxD2 = max(abs(delta2(id_GB)));
             ratio = maxD2 / maxD1;
-            disp(ratio);
+            disp(obj.loss.total);
             if ratio > obj.lambda * obj.ratioMax
                 obj.lambda = obj.lambdaCompen * ratio / obj.ratioMax;
                 obj.isBoundChain(obj.iter) = true;
@@ -1350,10 +1357,12 @@ classdef caseDistributionSystemMeasure < caseDistributionSystem
                     obj.lambda = min(obj.lambda, obj.lambdaMax);
                     obj.step = min(obj.step * obj.deRatio, obj.stepMax);
                     obj.momentRatio = min(obj.momentRatio * obj.inRatio, obj.momentRatioMax);
+                    obj.ratioMax = min(obj.ratioMax * obj.inRatio, obj.ratioMaxMax);
                 else
 %                     ratio = (obj.lossChain(1, obj.iter) / obj.lossChain(1, obj.iter-1))^2;
                     obj.lambda = min(obj.lambda * obj.inRatio, obj.lambdaMax);
                     obj.step = max(obj.step / obj.inRatio, obj.stepMin);
+                    obj.ratioMax = max(obj.ratioMax / obj.inRatio, obj.ratioMaxMin);
 
 %                     ratio = log10(max(obj.loss.total, obj.lossMin * 10) / obj.lossMin);
 %                     dRatio = 10/ratio;
@@ -1376,6 +1385,7 @@ classdef caseDistributionSystemMeasure < caseDistributionSystem
 %                 obj.momentLoss = obj.loss.total;
 %             end
             obj.stepChain(obj.iter) = obj.step;
+            obj.ratioMaxChain(obj.iter) = obj.ratioMax;
 %             obj.lambdaMax = log10(max(obj.loss.total, obj.lossMin * 10) / obj.lossMin) * 1000;
             % converge or not
 %             if obj.loss.total < obj.lossMin
