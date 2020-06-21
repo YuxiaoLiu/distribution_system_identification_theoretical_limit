@@ -12,7 +12,7 @@ range.Q = 0.3;             % the deviation range of reactive load to active load
 % the accuracy of measurement device
 ratio.P = 0.0001;%0.005
 ratio.Q = 0.0001;
-ratio.Vm = 0.001;%0.00001  0.00000001
+ratio.Vm = 0.0001;%0.00001  0.00000001
 ratio.Va = 0.001;%0.000005
 
 % if we only compute the bound of admittance matrix
@@ -76,8 +76,8 @@ caseDS = caseDS.calABound;
 % caseDS = caseDS.identifyMCMCEIO;
 % caseDS = caseDS.identifyMCMCEIV;
 % caseDS = caseDS.identifyOptNLP;
-% caseDS = caseDS.identifyOptGradient;
-caseDS = caseDS.identifyOptLMPower;
+caseDS = caseDS.identifyOptGradient;
+% caseDS = caseDS.identifyOptLMPower;
 % caseDS = caseDS.identifyOptNewton;
 % caseDS = caseDS.buildFIM(k);
 % caseDS = caseDS.updateTopo(topoTol, admittanceOnly);

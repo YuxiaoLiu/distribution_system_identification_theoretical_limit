@@ -73,6 +73,11 @@ classdef caseDistributionSystemMeasure < caseDistributionSystem
         isBoundChain        % if attain the bound that Hessian is too large
         deRatio             % ratio of step and lambda when loss decreases
         inRatio             % ratio of step and lambda when loss increases
+        
+        second              % the absolute proportion of second order
+        secondChain         % the chain of second
+        secondMax           % the maximum value of second
+        secondMin           % the minimum value of second
     end
     
     methods
@@ -640,10 +645,10 @@ classdef caseDistributionSystemMeasure < caseDistributionSystem
             % Hopefully we could implement some power system domain
             % knowledge into the process because we know the ground truth
             % value.
-            obj.maxIter = 2000;
-            obj.step = 1e-4;
-            obj.stepMax = 2;
-            obj.stepMin = 1e-4;
+            obj.maxIter = 4000;
+            obj.step = 1e-3;
+            obj.stepMax = 1e-3;
+            obj.stepMin = 1e-3;
             obj.momentRatio = 0.9;
             obj.updateStepFreq = 20;
             obj.vmvaWeight = 1;
@@ -1170,12 +1175,16 @@ classdef caseDistributionSystemMeasure < caseDistributionSystem
             % This function identify the topology and the parameters using
             % the LM-based strategy and the knowledge of power flow
             % equations
-            obj.lambda = 1e2; % the proportion of first order gradient
+%             obj.second = 2e1; % the absolute proportion of second order
+%             obj.secondMax = 1e4;
+%             obj.secondMin = 1e-2;
+            
+            obj.lambda = 1; % the proportion of first order gradient
             obj.lambdaMin = 1e-2;
             obj.lambdaMax = 1;%1e1;
-            obj.ratioMax = 1e5; % the ratio of second order / first order (final value)
-            obj.ratioMaxMax = 1e5;
-            obj.ratioMaxMin = 1e5;
+            obj.ratioMax = 1e4; % the ratio of second order / first order (final value)1e5
+            obj.ratioMaxMax = 1e4;
+            obj.ratioMaxMin = 1e4;
             obj.lambdaCompen = 1e2; % the additional compensate when second order is too large 1e2
             
             obj.step = 1e-4;
@@ -1184,7 +1193,7 @@ classdef caseDistributionSystemMeasure < caseDistributionSystem
             obj.deRatio = 1.1;
             obj.inRatio = 2;
             
-            obj.maxIter = 1000;
+            obj.maxIter = 10000;
             obj.thsTopo = 0.01;
             obj.Topo = true(obj.numBus, obj.numBus);
             obj.Tvec = logical(obj.matOfColDE(obj.Topo));
@@ -1201,10 +1210,11 @@ classdef caseDistributionSystemMeasure < caseDistributionSystem
 %             obj.dataO.Va = obj.data.Va;
             obj.dataO.Vm(2:end, :) = bsxfun(@times, obj.data.Vm_noised(2:end, :), obj.isMeasure.Vm(2:end));
             obj.dataO.Vm(obj.dataO.Vm == 0) = 1;
-            obj.dataO.Va = bsxfun(@times, obj.data.Va_noised, obj.isMeasure.Va);
-            
+%             obj.dataO.Va = bsxfun(@times, obj.data.Va_noised, obj.isMeasure.Va);
             obj.dataO.P = obj.data.P_noised;
             obj.dataO.Q = obj.data.Q_noised;
+            obj = updateParPF(obj);
+            obj.dataO.Va(obj.isMeasure.Va, :) = obj.data.Va_noised(obj.isMeasure.Va, :);
             
             % initialize the gradient numbers
             obj.numGrad.G = (obj.numBus - 1) * obj.numBus / 2; % exclude the diagonal elements
@@ -1224,6 +1234,7 @@ classdef caseDistributionSystemMeasure < caseDistributionSystem
             obj.lambdaChain = zeros(1, obj.maxIter);
             obj.isBoundChain = false(1, obj.maxIter);
             obj.ratioMaxChain = zeros(1, obj.maxIter);
+%             obj.secondChain = zeros(1, obj.maxIter);
             obj.isGB = false;
             obj.isConverge = 0;
             
@@ -1285,16 +1296,20 @@ classdef caseDistributionSystemMeasure < caseDistributionSystem
             delta2 = obj.H(id, id) \ obj.gradOrigin(id);
             maxD1 = max(abs(delta1(id_GB)));
             maxD2 = max(abs(delta2(id_GB)));
+%             maxD1 = mean(abs(delta1(id_GB)));
+%             maxD2 = mean(abs(delta2(id_GB)));
+%             delta = delta1 + delta2 / maxD2 * maxD1 * obj.second;
+%             obj.secondMax = maxD2 / maxD1;
+%             disp(obj.second);
+            disp(obj.loss.total / 1e10);
             ratio = maxD2 / maxD1;
-            disp(obj.loss.total);
             if ratio > obj.lambda * obj.ratioMax
                 obj.lambda = obj.lambdaCompen * ratio / obj.ratioMax;
                 obj.isBoundChain(obj.iter) = true;
             end
+            disp(obj.lambda);
             delta = delta1 * obj.lambda/(1+obj.lambda) + delta2 * 1/(1+obj.lambda);
             obj.lambdaChain(obj.iter) = obj.lambda;
-%             H1 = moment * obj.lambda + obj.H;
-%             delta = H1(id, id) \ obj.gradOrigin(id);
             par = zeros(obj.numGrad.Sum, 1);
             
             par(id) = obj.parChain(id, obj.iter) - delta(id);
@@ -1353,39 +1368,42 @@ classdef caseDistributionSystemMeasure < caseDistributionSystem
             try % I think we should use PD control here, currently it is only D control
                 if obj.lossChain(1, obj.iter) < obj.lossChain(1, obj.iter-1)
 %                     ratio = (obj.lossChain(1, obj.iter-1) / obj.lossChain(1, obj.iter));
+                    obj.step = min(obj.step * obj.deRatio, obj.stepMax);
                     obj.lambda = max(obj.lambda / obj.deRatio, obj.lambdaMin);
                     obj.lambda = min(obj.lambda, obj.lambdaMax);
-                    obj.step = min(obj.step * obj.deRatio, obj.stepMax);
                     obj.momentRatio = min(obj.momentRatio * obj.inRatio, obj.momentRatioMax);
-                    obj.ratioMax = min(obj.ratioMax * obj.inRatio, obj.ratioMaxMax);
+%                     obj.ratioMax = min(obj.ratioMax * obj.inRatio, obj.ratioMaxMax);
+%                     obj.second = min(obj.second * obj.inRatio, obj.secondMax);
                 else
 %                     ratio = (obj.lossChain(1, obj.iter) / obj.lossChain(1, obj.iter-1))^2;
-                    obj.lambda = min(obj.lambda * obj.inRatio, obj.lambdaMax);
                     obj.step = max(obj.step / obj.inRatio, obj.stepMin);
-                    obj.ratioMax = max(obj.ratioMax / obj.inRatio, obj.ratioMaxMin);
-
+                    obj.lambda = min(obj.lambda * obj.inRatio, obj.lambdaMax);
+%                     obj.ratioMax = max(obj.ratioMax / obj.inRatio, obj.ratioMaxMin);
+%                     obj.second = max(obj.second / obj.inRatio, obj.secondMin);
 %                     ratio = log10(max(obj.loss.total, obj.lossMin * 10) / obj.lossMin);
 %                     dRatio = 10/ratio;
 %                     obj.lambda = min(obj.lambda * (1.1+dRatio), obj.lambdaMax);
 %                     obj.step = max(obj.step / (1.1+dRatio), obj.stepMin);
-                    
                 end
             catch
             end
 %             if obj.iter > 1 % I think we should use PD control here, currently it is only D control
 %                 if obj.loss.total < obj.momentLoss
-%                     obj.lambda = max(obj.lambda / 1.2, obj.lambdaMin);
-%                     obj.step = min(obj.step * 1.2, obj.stepMax);
+%                     obj.step = min(obj.step * obj.deRatio, obj.stepMax);
+%                     obj.lambda = max(obj.lambda / obj.deRatio, obj.lambdaMin);
+%                     obj.lambda = min(obj.lambda, obj.lambdaMax);
+%                     obj.momentRatio = min(obj.momentRatio * obj.inRatio, obj.momentRatioMax);
 %                 else
-%                     obj.lambda = min(obj.lambda * 2, obj.lambdaMax);
-%                     obj.step = max(obj.step / 2, obj.stepMin);
+%                     obj.step = max(obj.step / obj.deRatio, obj.stepMin);
+%                     obj.lambda = min(obj.lambda * obj.deRatio, obj.lambdaMax);
 %                 end
 %                 obj.momentLoss = obj.momentLoss * 0.1 + obj.loss.total * (1-0.1);
 %             else
 %                 obj.momentLoss = obj.loss.total;
 %             end
             obj.stepChain(obj.iter) = obj.step;
-            obj.ratioMaxChain(obj.iter) = obj.ratioMax;
+%             obj.ratioMaxChain(obj.iter) = obj.ratioMax;
+%             obj.secondChain(obj.iter) = obj.second;   
 %             obj.lambdaMax = log10(max(obj.loss.total, obj.lossMin * 10) / obj.lossMin) * 1000;
             % converge or not
 %             if obj.loss.total < obj.lossMin
