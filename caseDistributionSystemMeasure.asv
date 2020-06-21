@@ -649,7 +649,7 @@ classdef caseDistributionSystemMeasure < caseDistributionSystem
             % knowledge into the process because we know the ground truth
             % value.
             obj.maxIter = 4000;
-            obj.step = 1e-4;
+            obj.step = 1e-3;
             obj.stepMax = 1e-3;
             obj.stepMin = 1e-3;
             obj.momentRatio = 0.9;
@@ -708,6 +708,10 @@ classdef caseDistributionSystemMeasure < caseDistributionSystem
                     if (mean(obj.lossChain(1, obj.iter-9:obj.iter-5)) < mean(obj.lossChain(1, obj.iter-4:obj.iter)))
                         obj.step = max(obj.step / 2, obj.stepMin);
                         obj.momentRatio = min(obj.momentRatio + 0.1, obj.momentRatioMax);
+                        disp('tune the weight');
+                        obj.tuneGrad = true;
+                        obj = buildMeasure(obj);
+                        obj.boundTuned = sqrt(diag(inv(full(obj.H))));
                     elseif (((obj.lossChain(1, obj.iter) - obj.lossChain(1, obj.iter-1)) < 0) ...
                         && ((obj.lossChain(1, obj.iter-1) - obj.lossChain(1, obj.iter-2)) < 0)...
                         && ((obj.lossChain(1, obj.iter-2) - obj.lossChain(1, obj.iter-3)) < 0))
@@ -720,10 +724,6 @@ classdef caseDistributionSystemMeasure < caseDistributionSystem
                         (obj.lossChain(1, obj.iter-8) - obj.lossChain(1, obj.iter-9)) < 0))
                         obj.step = max(obj.step / 2, obj.stepMin);
                         obj.momentRatio = min(obj.momentRatio + 0.1, obj.momentRatioMax);
-%                         disp('tune the weight');
-%                         obj.tuneGrad = true;
-%                         obj = buildMeasure(obj);
-%                         obj.boundTuned = sqrt(abs(diag(full(obj.H)\eye(obj.numGrad.Sum))));
                     end
 %                     if (mean(obj.lossChain(1, obj.iter-9:obj.iter-5)) < mean(obj.lossChain(1, obj.iter-4:obj.iter)))
 %                         isConverge = true;
