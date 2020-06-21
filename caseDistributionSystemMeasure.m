@@ -1195,15 +1195,15 @@ classdef caseDistributionSystemMeasure < caseDistributionSystem
             
             obj.lambda = 1; % the proportion of first order gradient
             obj.lambdaMin = 1e-2;
-            obj.lambdaMax = 1;%1e1;
+            obj.lambdaMax = 10;%1e1;
             obj.ratioMax = 1e4; % the ratio of second order / first order (final value)1e5
-            obj.ratioMaxMax = 1e4;
-            obj.ratioMaxMin = 1e4;
+%             obj.ratioMaxMax = 1e4;
+%             obj.ratioMaxMin = 1e4;
             obj.lambdaCompen = 1e2; % the additional compensate when second order is too large 1e2
             
             obj.step = 1e-4;
             obj.stepMin = 1e-4;
-            obj.stepMax = 2;
+            obj.stepMax = 1;
             obj.deRatio = 1.1;
             obj.inRatio = 2;
             
@@ -1215,6 +1215,7 @@ classdef caseDistributionSystemMeasure < caseDistributionSystem
             
             obj.momentRatio = 0.9;
             obj.momentRatioMax = 0.9;
+            obj.tuneGrad = false;
             
             % we first initialize the data
             obj.dataO.G = obj.dataE.G;
