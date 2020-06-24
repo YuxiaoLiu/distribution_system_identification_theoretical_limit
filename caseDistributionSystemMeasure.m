@@ -66,6 +66,7 @@ classdef caseDistributionSystemMeasure < caseDistributionSystem
         ratioMaxMax         % the maximum of ratioMax
         ratioMaxMin         % the minimum of ratioMin
         ratioMaxChain       % the chain of ratioMax
+        ratioChain          % the chain of ratio
         lambdaCompen        % the additional compensate when second order is too large
         
         idGB                % the address of G and B matrix
@@ -74,6 +75,10 @@ classdef caseDistributionSystemMeasure < caseDistributionSystem
         deRatio             % ratio of step and lambda when loss decreases
         inRatio             % ratio of step and lambda when loss increases
         
+        isSecond            % the mode of second order
+        isFirst             % whether we force the mode to be the first order
+        lastState           % we temporally save the last state for the second order mode
+        regretRatio         % the regret ratio in the second mode
         second              % the absolute proportion of second order
         secondChain         % the chain of second
         secondMax           % the maximum value of second
@@ -81,6 +86,7 @@ classdef caseDistributionSystemMeasure < caseDistributionSystem
         
         tuneGrad            % whether tune grad
         boundTuned          % the tuned bound
+        ratioMaxConst       % the constant of ratio max
     end
     
     methods
@@ -1194,20 +1200,22 @@ classdef caseDistributionSystemMeasure < caseDistributionSystem
 %             obj.secondMin = 1e-2;
             
             obj.lambda = 1; % the proportion of first order gradient
-            obj.lambdaMin = 1e-2;
+            obj.lambdaMin = 0.1;
             obj.lambdaMax = 10;%1e1;
             obj.ratioMax = 1e4; % the ratio of second order / first order (final value)1e5
+            obj.ratioMaxConst = 1e4;
 %             obj.ratioMaxMax = 1e4;
 %             obj.ratioMaxMin = 1e4;
-            obj.lambdaCompen = 1e2; % the additional compensate when second order is too large 1e2
+            obj.lambdaCompen = 1e4; % the additional compensate when second order is too large 1e2
             
-            obj.step = 1e-4;
-            obj.stepMin = 1e-4;
+            obj.step = 1e-5;
+            obj.stepMin = 1e-5;
             obj.stepMax = 1;
             obj.deRatio = 1.1;
             obj.inRatio = 2;
+            obj.regretRatio = 2;
             
-            obj.maxIter = 10000;
+            obj.maxIter = 1000;
             obj.thsTopo = 0.01;
             obj.Topo = true(obj.numBus, obj.numBus);
             obj.Tvec = logical(obj.matOfColDE(obj.Topo));
@@ -1249,15 +1257,20 @@ classdef caseDistributionSystemMeasure < caseDistributionSystem
             obj.lambdaChain = zeros(1, obj.maxIter);
             obj.isBoundChain = false(1, obj.maxIter);
             obj.ratioMaxChain = zeros(1, obj.maxIter);
+            obj.ratioChain = zeros(1, obj.maxIter);
 %             obj.secondChain = zeros(1, obj.maxIter);
             obj.isGB = false;
             obj.isConverge = 0;
+            obj.isSecond = false;
+            obj.isFirst = false;
             
             while (obj.iter <= obj.maxIter && obj.isConverge <= 2)
                 disp(obj.iter);
 %                 profile on;
                 % collect the parameter vector
                 obj = collectPar(obj);
+                % do the pseudo PF
+%                 obj = updateParPF(obj);
                 % build the Hessian
                 obj = buildMeasure(obj);
 %                 obj = buildHessian(obj);
@@ -1295,35 +1308,84 @@ classdef caseDistributionSystemMeasure < caseDistributionSystem
             % we update all the parameters together
             id = 1:obj.numGrad.Sum;
             id_GB = 1:obj.numGrad.G+obj.numGrad.B;
-            try
-                moment = obj.gradPast * obj.momentRatio + obj.grad * (1-obj.momentRatio);
-            catch
-                moment = obj.grad;
+            
+            % whether jump back to the last step
+            if obj.iter > 1 && obj.isSecond && obj.lossChain(1, obj.iter) > obj.lossChain(1, obj.iter-1) * obj.regretRatio
+                obj.isSecond = false;
+                obj.isFirst = true;
+                obj.iter = obj.iter - 1;
+                
+                delta1 = obj.lastState.delta1 / obj.lastState.step * obj.stepMin;
+                delta2 = obj.lastState.delta2;
+                maxD1 = obj.lastState.maxD1;
+                maxD2 = obj.lastState.maxD2;
+                obj.gradPast = obj.lastState.gradPast;
+                obj.grad = obj.lastState.grad;
+                
+                obj.step = obj.stepMin;
+                obj.lambda = obj.lambdaMax;
+            else
+                obj.isFirst = false;
             end
-%             obj.gradPast = moment;
-%             delta1 = obj.step * moment(id);
-% %             delta1 = moment(id);
-%             delta2 = obj.H(id, id) \ obj.gradOrigin(id);
-%             delta = delta1 * obj.lambda/(1+obj.lambda) + delta2 * 1/(1+obj.lambda);
+            % update the delta value
+            if ~obj.isFirst % the non regret mode
+                try
+                    moment = obj.gradPast * obj.momentRatio + obj.grad * (1-obj.momentRatio);
+                catch
+                    moment = obj.grad;
+                end
+    %             obj.gradPast = moment;
+    %             delta1 = obj.step * moment(id);
+    % %             delta1 = moment(id);
+    %             delta2 = obj.H(id, id) \ obj.gradOrigin(id);
+    %             delta = delta1 * obj.lambda/(1+obj.lambda) + delta2 * 1/(1+obj.lambda);
 
-            obj.gradPast = moment;
-            delta1 = obj.step * moment(id);
-            delta2 = obj.H(id, id) \ obj.gradOrigin(id);
-            maxD1 = max(abs(delta1(id_GB)));
-            maxD2 = max(abs(delta2(id_GB)));
-%             maxD1 = mean(abs(delta1(id_GB)));
-%             maxD2 = mean(abs(delta2(id_GB)));
-%             delta = delta1 + delta2 / maxD2 * maxD1 * obj.second;
-%             obj.secondMax = maxD2 / maxD1;
-%             disp(obj.second);
-            disp(obj.loss.total / 1e10);
-            ratio = maxD2 / maxD1;
-            if ratio > obj.lambda * obj.ratioMax
+                obj.gradPast = moment;
+                delta1 = obj.step * moment(id);
+                delta2 = obj.H(id, id) \ obj.gradOrigin(id);
+                maxD1 = max(abs(delta1(id_GB)));
+                maxD2 = max(abs(delta2(id_GB)));
+    %             maxD1 = mean(abs(delta1(id_GB)));
+    %             maxD2 = mean(abs(delta2(id_GB)));
+    %             delta = delta1 + delta2 / maxD2 * maxD1 * obj.second;
+    %             obj.secondMax = maxD2 / maxD1;
+    %             disp(obj.second);
+                disp(obj.loss.total / 1e10);
+                ratio = maxD2 / maxD1;
+                obj.ratioChain(obj.iter) = ratio / (obj.lambda * obj.ratioMax);
+                if ratio > obj.lambda * obj.ratioMax % first order mode
+                    obj.lambda = obj.lambdaCompen * ratio / obj.ratioMax;
+                    obj.isBoundChain(obj.iter) = true;
+                    obj.isSecond = false;
+
+                    obj.lastState.delta1 = delta1;
+                    obj.lastState.delta2 = delta2;
+                    obj.lastState.maxD1 = maxD1;
+                    obj.lastState.maxD2 = maxD2;
+                    obj.lastState.gradPast = obj.gradPast;
+                    obj.lastState.moment = moment;
+                    obj.lastState.grad = obj.grad;
+                    obj.lastState.step = obj.step;
+                    
+                    delta = delta1;
+                else % second order mode
+                    obj.isSecond = true;
+%                     delta = delta2;
+                    delta = delta1 * obj.lambda/(1+obj.lambda) + delta2 * 1/(1+obj.lambda);
+                end
+            else % the regret mode
+                ratio = maxD2 / maxD1;
                 obj.lambda = obj.lambdaCompen * ratio / obj.ratioMax;
                 obj.isBoundChain(obj.iter) = true;
+                obj.isFirst = false;
+                
+                delta = obj.stepMin * obj.grad;
+%                 delta = delta1;
             end
+            
             disp(obj.lambda);
-            delta = delta1 * obj.lambda/(1+obj.lambda) + delta2 * 1/(1+obj.lambda);
+            
+%             delta = delta1 * obj.lambda/(1+obj.lambda) + delta2 * 1/(1+obj.lambda);
             obj.lambdaChain(obj.iter) = obj.lambda;
             par = zeros(obj.numGrad.Sum, 1);
             
@@ -1417,7 +1479,10 @@ classdef caseDistributionSystemMeasure < caseDistributionSystem
 %                 obj.momentLoss = obj.loss.total;
 %             end
             obj.stepChain(obj.iter) = obj.step;
-%             obj.ratioMaxChain(obj.iter) = obj.ratioMax;
+            obj.ratioMax = log10(obj.loss.total/obj.lossMin) * obj.ratioMaxConst;
+            obj.ratioMax = max(obj.ratioMaxConst, obj.ratioMax);
+            obj.ratioMaxChain(obj.iter) = obj.ratioMax;
+
 %             obj.secondChain(obj.iter) = obj.second;   
 %             obj.lambdaMax = log10(max(obj.loss.total, obj.lossMin * 10) / obj.lossMin) * 1000;
             % converge or not
@@ -1521,8 +1586,8 @@ classdef caseDistributionSystemMeasure < caseDistributionSystem
 %             Y = makeYbus(mpcO);
 %             Gtest = real(full(Y));
 %             Btest = imag(full(Y));
-            mpcO.bus(mpcO.bus(:, 2) == 2, 2) = 1; % change all PV buses to PQ buses
-%             mpcO.bus(mpcO.bus(:, 2) == 1, 2) = 2; % change all PQ buses to PV buses
+%             mpcO.bus(mpcO.bus(:, 2) == 2, 2) = 1; % change all PV buses to PQ buses
+            mpcO.bus(mpcO.bus(:, 2) == 1, 2) = 2; % change all PQ buses to PV buses
             mpopt = mpoption('verbose',0,'out.all',0);
             
             for snap = 1:obj.numSnap
