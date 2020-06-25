@@ -192,10 +192,11 @@ classdef caseDistributionSystem < handle
             obj.isMeasure.P = true(obj.numBus, 1);
             obj.isMeasure.Q = true(obj.numBus, 1);
             obj.isMeasure.Vm = true(obj.numBus, 1);
-            obj.isMeasure.Va = false(obj.numBus, 1); % false
+            obj.isMeasure.Va = true(obj.numBus, 1); % false
             obj.isMeasure.Vm(1) = false;
             obj.isMeasure.Va(1) = false;
-            obj.isMeasure.Va(5:32) = true(length(5:32), 1);
+            obj.isMeasure.Va(4) = false;
+%             obj.isMeasure.Va(5:32) = true(length(5:32), 1);
 %             obj.isMeasure.Q(2:3) = false(2, 1);
 %             obj.isMeasure.P(6:7) = false(2, 1);
             % Set the tolerance of the modified Cholesky decomposition
