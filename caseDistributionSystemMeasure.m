@@ -1486,9 +1486,9 @@ classdef caseDistributionSystemMeasure < caseDistributionSystem
 %             obj.secondChain(obj.iter) = obj.second;   
 %             obj.lambdaMax = log10(max(obj.loss.total, obj.lossMin * 10) / obj.lossMin) * 1000;
             % converge or not
-%             if obj.loss.total < obj.lossMin
-%                 obj.isConverge = 3;
-%             end
+            if obj.loss.total < obj.lossMin
+                obj.isConverge = 3;
+            end
         end
         
         function obj = buildJacobian(obj)
