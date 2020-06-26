@@ -70,7 +70,7 @@ caseDS = caseDS.updateTopo(caseDS.topoPrior);
 % caseDS = caseDS.iterateY;
 caseDS = caseDS.preEvaluation(prior);
 caseDS = caseDS.approximateFIM(k);
-caseDS = caseDS.calABound(false, caseDS.topoPrior);
+caseDS = caseDS.calABound;
 % profile off
 % profile viewer
 % caseDS = caseDS.initValue;

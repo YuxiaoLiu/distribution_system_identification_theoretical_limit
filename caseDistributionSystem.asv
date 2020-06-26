@@ -211,7 +211,7 @@ classdef caseDistributionSystem < handle
             obj.isMeasure.P = true(obj.numBus, 1);
             obj.isMeasure.Q = true(obj.numBus, 1);
             obj.isMeasure.Vm = true(obj.numBus, 1);
-            obj.isMeasure.Va = false(obj.numBus, 1); % false
+            obj.isMeasure.Va = true(obj.numBus, 1); % false
             obj.isMeasure.Vm(1) = false;
             obj.isMeasure.Va(1) = false;
 %             obj.isMeasure.Va(4) = false;
@@ -647,7 +647,6 @@ classdef caseDistributionSystem < handle
                 obj.topoTol = 0.05;
                 obj.admittanceOnly = false;
             elseif nargin == 1
-                obj.topoPrior = false(obj.numBus, obj.numBus);
                 obj.topoTol = 0.05;
                 obj.admittanceOnly = false;
             end
