@@ -1250,12 +1250,12 @@ classdef caseDistributionSystemMeasure < caseDistributionSystem
             obj = updateParPF(obj);
             obj.dataO.Va(obj.isMeasure.Va, :) = obj.data.Va_noised(obj.isMeasure.Va, :);
             
-            obj.dataO.P = obj.data.P;
-            obj.dataO.Q = obj.data.Q;
-            obj.dataO.Vm = obj.data.Vm;
-            obj.dataO.Va = obj.data.Va;
-            obj.dataO.G = obj.data.G;
-            obj.dataO.B = obj.data.B;
+%             obj.dataO.P = obj.data.P;
+%             obj.dataO.Q = obj.data.Q;
+%             obj.dataO.Vm = obj.data.Vm;
+%             obj.dataO.Va = obj.data.Va;
+%             obj.dataO.G = obj.data.G;
+%             obj.dataO.B = obj.data.B;
             
             % initialize the gradient numbers
             obj.numGrad.G = (obj.numBus - 1) * obj.numBus / 2; % exclude the diagonal elements
