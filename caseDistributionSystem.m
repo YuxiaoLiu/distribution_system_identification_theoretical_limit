@@ -190,6 +190,8 @@ classdef caseDistributionSystem < handle
                         obj.topoPrior(idCol(i), idRow(i)) = false;
                     end
             end
+            
+            obj.topoPrior = false(obj.numBus, obj.numBus);
         end
         
         function obj = setAccuracy(obj, varargin)

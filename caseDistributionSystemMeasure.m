@@ -1209,16 +1209,16 @@ classdef caseDistributionSystemMeasure < caseDistributionSystem
 %             obj.secondMax = 1e4;
 %             obj.secondMin = 1e-2;
             
-            obj.lambda = 1e2; % the proportion of first order gradient
+            obj.lambda = 1e1; % the proportion of first order gradient
             obj.lambdaMin = 0.1;
-            obj.lambdaMax = 1e3;%10;
+            obj.lambdaMax = 1e3;%1e3 1e2;
             obj.ratioMax = 1e3; % the ratio of second order / first order (final value)1e4
             obj.ratioMaxConst = 1e4; % 1e4
 %             obj.ratioMaxMax = 1e4;
 %             obj.ratioMaxMin = 1e4;
             obj.lambdaCompen = 1e4; % the additional compensate when second order is too large 1e2
             
-            obj.step = 1e-3;
+            obj.step = 1e-5; % 1e-3
             obj.stepMin = 1e-5;
             obj.stepMax = 1;
             obj.deRatio = 1.1;
@@ -1249,6 +1249,13 @@ classdef caseDistributionSystemMeasure < caseDistributionSystem
             obj.dataO.Q = obj.data.Q_noised;
             obj = updateParPF(obj);
             obj.dataO.Va(obj.isMeasure.Va, :) = obj.data.Va_noised(obj.isMeasure.Va, :);
+            
+            obj.dataO.P = obj.data.P;
+            obj.dataO.Q = obj.data.Q;
+            obj.dataO.Vm = obj.data.Vm;
+            obj.dataO.Va = obj.data.Va;
+            obj.dataO.G = obj.data.G;
+            obj.dataO.B = obj.data.B;
             
             % initialize the gradient numbers
             obj.numGrad.G = (obj.numBus - 1) * obj.numBus / 2; % exclude the diagonal elements
@@ -1329,7 +1336,8 @@ classdef caseDistributionSystemMeasure < caseDistributionSystem
                 obj.isFirst = true;
                 obj.iter = obj.iter - 1;
                 
-                delta1 = obj.lastState.delta1 / obj.lastState.step * obj.stepMin;
+%                 delta1 = obj.lastState.delta1 / obj.lastState.step * obj.stepMin;
+                delta1 = obj.lastState.delta1 / obj.inRatio;
                 delta2 = obj.lastState.delta2;
                 maxD1 = obj.lastState.maxD1;
                 maxD2 = obj.lastState.maxD2;
