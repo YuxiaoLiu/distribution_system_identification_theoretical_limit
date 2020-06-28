@@ -89,6 +89,7 @@ classdef caseDistributionSystemMeasure < caseDistributionSystem
         ratioMaxConst       % the constant of ratio max
         
         err                 % the evaluation errors
+        ratioVaCal          % the calculation ratio errors of Va
     end
     
     methods
@@ -1224,6 +1225,7 @@ classdef caseDistributionSystemMeasure < caseDistributionSystem
             obj.deRatio = 1.1;
             obj.inRatio = 2;
             obj.regretRatio = 2;
+            obj.ratioVaCal = 100;
             
             obj.maxIter = 10000;
             obj.thsTopo = 0.01;
@@ -1247,15 +1249,19 @@ classdef caseDistributionSystemMeasure < caseDistributionSystem
 %             obj.dataO.Va = bsxfun(@times, obj.data.Va_noised, obj.isMeasure.Va);
             obj.dataO.P = obj.data.P_noised;
             obj.dataO.Q = obj.data.Q_noised;
+            
+            % adjust the Va accuracy
+            obj.dataO.Va = zeros(obj.numBus, obj.numSnap);
             obj = updateParPF(obj);
             obj.dataO.Va(obj.isMeasure.Va, :) = obj.data.Va_noised(obj.isMeasure.Va, :);
+            obj.sigma.VaCal = ones(obj.numBus, 1) * pi / 1800  * obj.ratioVaCal;
             
-            obj.dataO.P = obj.data.P;
-            obj.dataO.Q = obj.data.Q;
-            obj.dataO.Vm = obj.data.Vm;
-            obj.dataO.Va = obj.data.Va;
-            obj.dataO.G = obj.data.G;
-            obj.dataO.B = obj.data.B;
+%             obj.dataO.P = obj.data.P;
+%             obj.dataO.Q = obj.data.Q;
+%             obj.dataO.Vm = obj.data.Vm;
+%             obj.dataO.Va = obj.data.Va;
+%             obj.dataO.G = obj.data.G;
+%             obj.dataO.B = obj.data.B;
             
             % initialize the gradient numbers
             obj.numGrad.G = (obj.numBus - 1) * obj.numBus / 2; % exclude the diagonal elements
@@ -1412,7 +1418,7 @@ classdef caseDistributionSystemMeasure < caseDistributionSystem
             obj.lambdaChain(obj.iter) = obj.lambda;
             par = zeros(obj.numGrad.Sum, 1);
             
-            par(id) = obj.parChain(id, obj.iter) - delta; % 这一步产生了冲突，维度不一样啊
+            par(id) = obj.parChain(id, obj.iter) - delta;
             G = par(1:obj.numGrad.G);
             B = par(1+obj.numGrad.G:obj.numGrad.G+obj.numGrad.B);
 %             G(G>0) = 0;
@@ -1619,6 +1625,7 @@ classdef caseDistributionSystemMeasure < caseDistributionSystem
                 mpcO.bus(:, 8) = obj.dataO.Vm(:, snap);
                 mpcThis = runpf(mpcO, mpopt);
                 obj.dataO.Va(:, snap) = mpcThis.bus(:,9)/180*pi;
+%                 obj.dataO.Va(~obj.isMeasure.Va, snap) = mpcThis.bus(~obj.isMeasure.Va,9)/180*pi;
             end
         end
         
@@ -1820,7 +1827,7 @@ classdef caseDistributionSystemMeasure < caseDistributionSystem
                 
                 % calculate the sub-vector of Va of all buses
                 for j = 1:obj.numBus
-                    if obj.isMeasure.Va(j)
+                    if obj.isMeasure.Va(j) %j > 1
                         obj = buildMeasureVa(obj, i, j, pt);
 %                         R(pt) = obj.sigma.Va(j).^(-1);
                         pt = pt + 1;
@@ -1828,7 +1835,7 @@ classdef caseDistributionSystemMeasure < caseDistributionSystem
                 end
             end
             
-            assert (pt -1 == obj.numMeasure);
+%             assert (pt -1 == obj.numMeasure);
             
             % collect the gradients, the losses, and compute the Hessian
             obj.grad = obj.gradP + obj.gradQ + obj.gradVm + obj.gradVa;
@@ -1944,11 +1951,15 @@ classdef caseDistributionSystemMeasure < caseDistributionSystem
             % This method builds the measurement matrix from the measurement of Va
             
             % build HVa, GradientVa and lossVa
-            lossThis = (obj.dataO.Va(bus, snap) - obj.data.Va_noised(bus, snap));
-            obj.loss.Va = obj.loss.Va + lossThis^2 * obj.sigma.Va(bus).^(-2);
-            obj.gradVa(obj.numGrad.G+obj.numGrad.B+obj.numGrad.Vm+obj.idVmVa(bus-1)) = ...
-                obj.gradVa(obj.numGrad.G+obj.numGrad.B+obj.numGrad.Vm+obj.idVmVa(bus-1)) + obj.sigma.Va(bus).^(-2) * lossThis;
-            obj.M(obj.numGrad.G+obj.numGrad.B+obj.numGrad.Vm+obj.idVmVa(bus-1), pt) = obj.sigma.Va(bus).^(-1);
+            if obj.isMeasure.Va(bus)
+                lossThis = (obj.dataO.Va(bus, snap) - obj.data.Va_noised(bus, snap));
+                obj.loss.Va = obj.loss.Va + lossThis^2 * obj.sigma.Va(bus).^(-2);
+                obj.gradVa(obj.numGrad.G+obj.numGrad.B+obj.numGrad.Vm+obj.idVmVa(bus-1)) = ...
+                    obj.gradVa(obj.numGrad.G+obj.numGrad.B+obj.numGrad.Vm+obj.idVmVa(bus-1)) + obj.sigma.Va(bus).^(-2) * lossThis;
+                obj.M(obj.numGrad.G+obj.numGrad.B+obj.numGrad.Vm+obj.idVmVa(bus-1), pt) = obj.sigma.Va(bus).^(-1);
+            else
+                obj.M(obj.numGrad.G+obj.numGrad.B+obj.numGrad.Vm+obj.idVmVa(bus-1), pt) = obj.sigma.VaCal(bus).^(-1);
+            end
         end
         
         function obj = buildHessian(obj)

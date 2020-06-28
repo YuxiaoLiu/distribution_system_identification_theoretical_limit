@@ -1247,6 +1247,7 @@ classdef caseDistributionSystemMeasure < caseDistributionSystem
 %             obj.dataO.Va = bsxfun(@times, obj.data.Va_noised, obj.isMeasure.Va);
             obj.dataO.P = obj.data.P_noised;
             obj.dataO.Q = obj.data.Q_noised;
+            obj.dataO.Va = zeros(obj.numBus, obj.numSnap);
             obj = updateParPF(obj);
             obj.dataO.Va(obj.isMeasure.Va, :) = obj.data.Va_noised(obj.isMeasure.Va, :);
             
@@ -1288,7 +1289,7 @@ classdef caseDistributionSystemMeasure < caseDistributionSystem
                 % collect the parameter vector
                 obj = collectPar(obj);
                 % do the pseudo PF
-%                 obj = updateParPF(obj);
+                obj = updateParPF(obj);
                 % build the Hessian
                 obj = buildMeasure(obj);
 %                 obj = buildHessian(obj);
