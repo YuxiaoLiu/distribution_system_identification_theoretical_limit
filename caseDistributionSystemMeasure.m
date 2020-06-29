@@ -89,6 +89,14 @@ classdef caseDistributionSystemMeasure < caseDistributionSystem
         ratioMaxConst       % the constant of ratio max
         
         err                 % the evaluation errors
+        vaPseudoWeight      % the enlarge sigma of the va pseudo measurement
+        vaPseudoMax         % the maximum value of vaPseudoWeight
+        vaPseudoMin         % the minimum value of vaPseudoWeight
+        startPF             % the loss value to start PF calculation log10(loss/lossMin)
+        maxD2Chain          % the chain of maxD2
+        maxD2Upper          % the upper bound of maxD2
+        maxD2Lower          % the lower bound of maxD2
+        D2D1Chain           % the chain of D2/D1
     end
     
     methods
@@ -1218,12 +1226,19 @@ classdef caseDistributionSystemMeasure < caseDistributionSystem
 %             obj.ratioMaxMin = 1e4;
             obj.lambdaCompen = 1e4; % the additional compensate when second order is too large 1e2
             
-            obj.step = 1e-5; % 1e-3
+            obj.vaPseudoWeight = 100;
+            obj.vaPseudoMax = 1e3;
+            obj.vaPseudoMin = 1;
+            obj.maxD2Upper = 2000;
+            obj.maxD2Lower = 50;
+            
+            obj.step = 1e-5; % 1e-5
             obj.stepMin = 1e-5;
             obj.stepMax = 1;
             obj.deRatio = 1.1;
             obj.inRatio = 2;
-            obj.regretRatio = 2;
+            obj.regretRatio = 1.5;
+            obj.startPF = 4;
             
             obj.maxIter = 10000;
             obj.thsTopo = 0.01;
@@ -1277,6 +1292,8 @@ classdef caseDistributionSystemMeasure < caseDistributionSystem
             obj.isBoundChain = false(1, obj.maxIter);
             obj.ratioMaxChain = zeros(1, obj.maxIter);
             obj.ratioChain = zeros(1, obj.maxIter);
+            obj.maxD2Chain = zeros(1, obj.maxIter);
+            obj.D2D1Chain = zeros(1, obj.maxIter);
 %             obj.secondChain = zeros(1, obj.maxIter);
             obj.isGB = false;
             obj.isConverge = 0;
@@ -1286,10 +1303,14 @@ classdef caseDistributionSystemMeasure < caseDistributionSystem
             while (obj.iter <= obj.maxIter && obj.isConverge <= 2)
                 disp(obj.iter);
 %                 profile on;
+%                 % do the pseudo PF
+%                 if ~all(obj.isMeasure.Va(2:end)) ...
+%                         && ~obj.isFirst && obj.iter > 1 ...
+%                         && log10(obj.loss.total / obj.lossMin) < obj.startPF% We do not calculate the PF for the regret mode
+% %                     obj = updateParPF(obj);
+%                 end
                 % collect the parameter vector
                 obj = collectPar(obj);
-                % do the pseudo PF
-                obj = updateParPF(obj);
                 % build the Hessian
                 obj = buildMeasure(obj);
 %                 obj = buildHessian(obj);
@@ -1300,6 +1321,7 @@ classdef caseDistributionSystemMeasure < caseDistributionSystem
                 obj.gradOrigin = obj.grad;
                 obj = tuneGradient(obj);
                 % update the parameters
+                obj.isFirst = false;
                 obj = updateParLMPower(obj);
                 obj.iter = obj.iter + 1;
 %                 profile off;
@@ -1310,6 +1332,8 @@ classdef caseDistributionSystemMeasure < caseDistributionSystem
             obj.stepChain(:, obj.iter:end) = [];
             obj.lambdaChain(:, obj.iter:end) = [];
             obj.ratioMaxChain(:, obj.iter:end) = [];
+            obj.maxD2Chain(:, obj.iter:end) = [];
+            obj.D2D1Chain(:, obj.iter:end) = [];
             
         end
         
@@ -1332,7 +1356,7 @@ classdef caseDistributionSystemMeasure < caseDistributionSystem
             id = [id_GB; true(obj.numGrad.Vm+obj.numGrad.Va, 1)];
             
             % whether jump back to the last step
-            if obj.iter > 1 && obj.isSecond && obj.lossChain(1, obj.iter) > obj.lossChain(1, obj.iter-1) * obj.regretRatio
+            if obj.iter > 1 && obj.lossChain(1, obj.iter) > obj.lossChain(1, obj.iter-1) * obj.regretRatio % obj.isSecond && 
                 obj.isSecond = false;
                 obj.isFirst = true;
                 obj.iter = obj.iter - 1;
@@ -1347,9 +1371,7 @@ classdef caseDistributionSystemMeasure < caseDistributionSystem
                 
 %                 obj.step = obj.stepMin;
                 obj.step = obj.step / obj.inRatio;
-                obj.lambda = obj.lambdaMax;
-            else
-                obj.isFirst = false;
+                obj.lambda = obj.lambda * obj.inRatio;
             end
             % update the delta value
             if ~obj.isFirst % the non regret mode
@@ -1369,6 +1391,8 @@ classdef caseDistributionSystemMeasure < caseDistributionSystem
                 delta2 = obj.H(id, id) \ obj.gradOrigin(id);
                 maxD1 = max(abs(delta1));
                 maxD2 = max(abs(delta2));
+                D2D1Ratio = maxD2/(maxD1/obj.step);
+                obj.D2D1Chain(obj.iter) = D2D1Ratio;
     %             maxD1 = mean(abs(delta1(id_GB)));
     %             maxD2 = mean(abs(delta2(id_GB)));
     %             delta = delta1 + delta2 / maxD2 * maxD1 * obj.second;
@@ -1377,6 +1401,16 @@ classdef caseDistributionSystemMeasure < caseDistributionSystem
                 disp(obj.loss.total / 1e10);
                 ratio = maxD2 / maxD1;
                 obj.ratioChain(obj.iter) = ratio / (obj.lambda * obj.ratioMax);
+                
+                obj.lastState.delta1 = delta1;
+                obj.lastState.delta2 = delta2;
+                obj.lastState.maxD1 = maxD1;
+                obj.lastState.maxD2 = maxD2;
+                obj.lastState.gradPast = obj.gradPast;
+                obj.lastState.moment = moment;
+                obj.lastState.grad = obj.grad;
+                obj.lastState.step = obj.step;
+                    
                 if ratio > obj.lambda * obj.ratioMax % first order mode
                     obj.lambda = obj.lambdaCompen * ratio / obj.ratioMax;
                     obj.isBoundChain(obj.iter) = true;
@@ -1387,23 +1421,13 @@ classdef caseDistributionSystemMeasure < caseDistributionSystem
                     obj.isSecond = true;
 %                     delta = delta2;
                     delta = delta1 * obj.lambda/(1+obj.lambda) + delta2 * 1/(1+obj.lambda);
-                    
-                    obj.lastState.delta1 = delta1;
-                    obj.lastState.delta2 = delta2;
-                    obj.lastState.maxD1 = maxD1;
-                    obj.lastState.maxD2 = maxD2;
-                    obj.lastState.gradPast = obj.gradPast;
-                    obj.lastState.moment = moment;
-                    obj.lastState.grad = obj.grad;
-                    obj.lastState.step = obj.step;
                 end
             else % the regret mode
                 ratio = maxD2 / maxD1;
                 obj.lambda = obj.lambdaCompen * ratio / obj.ratioMax;
                 obj.isBoundChain(obj.iter) = true;
-                obj.isFirst = false;
                 
-                delta = obj.stepMin * obj.grad(id);
+                delta = obj.step * obj.grad(id);
 %                 delta = delta1;
             end
             
@@ -1413,7 +1437,7 @@ classdef caseDistributionSystemMeasure < caseDistributionSystem
             obj.lambdaChain(obj.iter) = obj.lambda;
             par = zeros(obj.numGrad.Sum, 1);
             
-            par(id) = obj.parChain(id, obj.iter) - delta; % 这一步产生了冲突，维度不一样啊
+            par(id) = obj.parChain(id, obj.iter) - delta;
             G = par(1:obj.numGrad.G);
             B = par(1+obj.numGrad.G:obj.numGrad.G+obj.numGrad.B);
 %             G(G>0) = 0;
@@ -1466,27 +1490,30 @@ classdef caseDistributionSystemMeasure < caseDistributionSystem
 %                 obj.dataO.Va(2:end, :) = reshape(Va, [], obj.numBus-1)'; % exclude the source bus
 %             end
             % update the lambda and the step length
-            try % I think we should use PD control here, currently it is only D control
-                if obj.lossChain(1, obj.iter) < obj.lossChain(1, obj.iter-1)
-%                     ratio = (obj.lossChain(1, obj.iter-1) / obj.lossChain(1, obj.iter));
-                    obj.step = min(obj.step * obj.deRatio, obj.stepMax);
-                    obj.lambda = max(obj.lambda / obj.deRatio, obj.lambdaMin);
-                    obj.lambda = min(obj.lambda, obj.lambdaMax);
-                    obj.momentRatio = min(obj.momentRatio * obj.inRatio, obj.momentRatioMax);
-%                     obj.ratioMax = min(obj.ratioMax * obj.inRatio, obj.ratioMaxMax);
-%                     obj.second = min(obj.second * obj.inRatio, obj.secondMax);
-                else
-%                     ratio = (obj.lossChain(1, obj.iter) / obj.lossChain(1, obj.iter-1))^2;
-                    obj.step = max(obj.step / obj.inRatio, obj.stepMin);
-                    obj.lambda = min(obj.lambda * obj.inRatio, obj.lambdaMax);
-%                     obj.ratioMax = max(obj.ratioMax / obj.inRatio, obj.ratioMaxMin);
-%                     obj.second = max(obj.second / obj.inRatio, obj.secondMin);
-%                     ratio = log10(max(obj.loss.total, obj.lossMin * 10) / obj.lossMin);
-%                     dRatio = 10/ratio;
-%                     obj.lambda = min(obj.lambda * (1.1+dRatio), obj.lambdaMax);
-%                     obj.step = max(obj.step / (1.1+dRatio), obj.stepMin);
+            if ~obj.isFirst
+                try % I think we should use PD control here, currently it is only D control
+                    if obj.lossChain(1, obj.iter) < obj.lossChain(1, obj.iter-1)
+    %                     ratio = (obj.lossChain(1, obj.iter-1) / obj.lossChain(1, obj.iter));
+                        obj.step = min(obj.step * obj.deRatio, obj.stepMax);
+                        obj.lambda = max(obj.lambda / obj.deRatio, obj.lambdaMin);
+                        obj.lambda = min(obj.lambda, obj.lambdaMax);
+                        obj.momentRatio = min(obj.momentRatio * obj.inRatio, obj.momentRatioMax);
+    %                     obj.ratioMax = min(obj.ratioMax * obj.inRatio, obj.ratioMaxMax);
+    %                     obj.second = min(obj.second * obj.inRatio, obj.secondMax);
+                    else
+    %                     ratio = (obj.lossChain(1, obj.iter) / obj.lossChain(1, obj.iter-1))^2;
+
+                        obj.step = max(obj.step / obj.inRatio, obj.stepMin);
+                        obj.lambda = min(obj.lambda * obj.inRatio, obj.lambdaMax);
+    %                     obj.ratioMax = max(obj.ratioMax / obj.inRatio, obj.ratioMaxMin);
+    %                     obj.second = max(obj.second / obj.inRatio, obj.secondMin);
+    %                     ratio = log10(max(obj.loss.total, obj.lossMin * 10) / obj.lossMin);
+    %                     dRatio = 10/ratio;
+    %                     obj.lambda = min(obj.lambda * (1.1+dRatio), obj.lambdaMax);
+    %                     obj.step = max(obj.step / (1.1+dRatio), obj.stepMin);
+                    end
+                catch
                 end
-            catch
             end
 %             if obj.iter > 1 % I think we should use PD control here, currently it is only D control
 %                 if obj.loss.total < obj.momentLoss
@@ -1502,10 +1529,23 @@ classdef caseDistributionSystemMeasure < caseDistributionSystem
 %             else
 %                 obj.momentLoss = obj.loss.total;
 %             end
+%             obj.isFirst = false;
             obj.stepChain(obj.iter) = obj.step;
             obj.ratioMax = log10(obj.loss.total/obj.lossMin) * obj.ratioMaxConst;
             obj.ratioMax = max(obj.ratioMaxConst, obj.ratioMax);
             obj.ratioMaxChain(obj.iter) = obj.ratioMax;
+            obj.maxD2Chain(obj.iter) = maxD2;
+            
+            % adjust vaPseudoWeight
+            if maxD2 > obj.maxD2Upper
+                obj.vaPseudoWeight = 1;
+            end
+%             if maxD2 > obj.maxD2Upper
+%                 obj.vaPseudoWeight = max(obj.vaPseudoMin, obj.vaPseudoWeight / obj.inRatio);
+%             elseif maxD2 < obj.maxD2Lower
+%                 obj.vaPseudoWeight = min(obj.vaPseudoMax, obj.vaPseudoWeight * obj.inRatio);
+%             end
+%             obj.vaPseudoWeight = 10 / log10(obj.loss.total / obj.lossMin);
 
 %             obj.secondChain(obj.iter) = obj.second;   
 %             obj.lambdaMax = log10(max(obj.loss.total, obj.lossMin * 10) / obj.lossMin) * 1000;
@@ -1825,11 +1865,17 @@ classdef caseDistributionSystemMeasure < caseDistributionSystem
                         obj = buildMeasureVa(obj, i, j, pt);
 %                         R(pt) = obj.sigma.Va(j).^(-1);
                         pt = pt + 1;
+                    elseif j > 1 % we can add a judgement here
+                        if obj.vaPseudoWeight < 10
+                            obj.M(obj.numGrad.G+obj.numGrad.B+obj.numGrad.Vm+obj.idVmVa(j-1), pt) ...
+                                = (obj.sigma.Va(j)*obj.vaPseudoWeight).^(-1);
+                            pt = pt + 1;
+                        end
                     end
                 end
             end
             
-            assert (pt -1 == obj.numMeasure);
+%             assert (pt -1 == obj.numMeasure);
             
             % collect the gradients, the losses, and compute the Hessian
             obj.grad = obj.gradP + obj.gradQ + obj.gradVm + obj.gradVa;

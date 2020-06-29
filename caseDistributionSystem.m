@@ -217,7 +217,7 @@ classdef caseDistributionSystem < handle
             obj.isMeasure.Vm(1) = false;
             obj.isMeasure.Va(1) = false;
 %             obj.isMeasure.Va(4) = false;
-%             obj.isMeasure.Va(5:32) = true(length(5:32), 1);
+%             obj.isMeasure.Va(2:5) = true(length(2:5), 1);
 %             obj.isMeasure.Q(2:3) = false(2, 1);
 %             obj.isMeasure.P(6:7) = false(2, 1);
             % Set the tolerance of the modified Cholesky decomposition
@@ -302,8 +302,11 @@ classdef caseDistributionSystem < handle
             for i = 1:obj.numBus
                 if obj.isMeasure.P(i)
                     for j = 1:obj.numSnap
+%                         profile on;
                         obj = buildFIMP(obj, i, j, pt);
                         pt = pt + 1;
+%                         profile off;
+%                         profile viewer;
                     end
                 end
             end
