@@ -1237,7 +1237,7 @@ classdef caseDistributionSystemMeasure < caseDistributionSystem
             obj.stepMax = 1;
             obj.deRatio = 1.1;
             obj.inRatio = 2;
-            obj.regretRatio = 1.5;
+            obj.regretRatio = 2;
             obj.startPF = 4;
             
             obj.maxIter = 10000;
