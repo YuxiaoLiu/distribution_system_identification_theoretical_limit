@@ -13,7 +13,7 @@ range.Q = 0.3;             % the deviation range of reactive load to active load
 ratio.P = 0.002;%0.005
 ratio.Q = 0.002;
 ratio.Vm = 0.002;%0.00001  0.00000001
-ratio.Va = 0.002;%0.000005
+ratio.Va = 0.0001;%0.000005
 
 % if we only compute the bound of admittance matrix
 admittanceOnly = false;

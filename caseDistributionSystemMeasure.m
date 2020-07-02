@@ -30,6 +30,7 @@ classdef caseDistributionSystemMeasure < caseDistributionSystem
         kZero               % the ratio that we set nondiagonal elements to zero
         maxIter             % the maximum iteration in the gradient-based methods
         step                % the step length of the iterations
+        stepInit            % the initial step
         stepMin             % the minimum step length
         stepMax             % the maximum step length
         stepChain           % the chain of the step length
@@ -90,6 +91,7 @@ classdef caseDistributionSystemMeasure < caseDistributionSystem
         
         err                 % the evaluation errors
         vaPseudoWeight      % the enlarge sigma of the va pseudo measurement
+        vaPseudoWeightInit  % the initial value of vaPseudoWeight
         vaPseudoMax         % the maximum value of vaPseudoWeight
         vaPseudoMin         % the minimum value of vaPseudoWeight
         startPF             % the loss value to start PF calculation log10(loss/lossMin)
@@ -97,6 +99,13 @@ classdef caseDistributionSystemMeasure < caseDistributionSystem
         maxD2Upper          % the upper bound of maxD2
         maxD2Lower          % the lower bound of maxD2
         D2D1Chain           % the chain of D2/D1
+        
+        updateStart         % the start iteration number to update the topology
+        updateStep          % the number of steps we calculate the judge whether stop iteration
+        updateRatio         % the long term ratio and the short term ratio to stop iteration
+        updateLast          % the last update step
+        updateLastLoss      % the last loss function
+        updateRatioLast     % the last topology update ratio
     end
     
     methods
@@ -937,6 +946,8 @@ classdef caseDistributionSystemMeasure < caseDistributionSystem
             % This method tunes the gradient according to the weights. In
             % this version we treat P and Q together.
             
+            obj.gradOrigin = obj.grad;
+            
             % The weight of the initial gradient
             wg.P.G = mean(abs(obj.gradP(1:obj.numGrad.G)));
             wg.P.B = mean(abs(obj.gradP(1+obj.numGrad.G:obj.numGrad.G+obj.numGrad.B)));
@@ -1219,20 +1230,22 @@ classdef caseDistributionSystemMeasure < caseDistributionSystem
             
             obj.lambda = 1e1; % the proportion of first order gradient
             obj.lambdaMin = 0.1;
-            obj.lambdaMax = 1e3;%1e3 1e2;
+            obj.lambdaMax = 1e2;%1e3 1e2;
             obj.ratioMax = 1e3; % the ratio of second order / first order (final value)1e4
             obj.ratioMaxConst = 1e4; % 1e4
 %             obj.ratioMaxMax = 1e4;
 %             obj.ratioMaxMin = 1e4;
             obj.lambdaCompen = 1e4; % the additional compensate when second order is too large 1e2
             
-            obj.vaPseudoWeight = 100;
+            
+            obj.vaPseudoWeightInit = 100;
+            obj.vaPseudoWeight = obj.vaPseudoWeightInit;
             obj.vaPseudoMax = 1e3;
             obj.vaPseudoMin = 1;
-            obj.maxD2Upper = 2000;
+            obj.maxD2Upper = 5000;
             obj.maxD2Lower = 50;
             
-            obj.step = 1e-5; % 1e-5
+            obj.stepInit = 1e-3; % 1e-5
             obj.stepMin = 1e-5;
             obj.stepMax = 1;
             obj.deRatio = 1.1;
@@ -1240,8 +1253,15 @@ classdef caseDistributionSystemMeasure < caseDistributionSystem
             obj.regretRatio = 2;
             obj.startPF = 4;
             
-            obj.maxIter = 10000;
-            obj.thsTopo = 0.01;
+            obj.updateStart = 20;           % the start iteration number to update the topology
+            obj.updateStep = 6;             % the number of steps we calculate the judge whether stop iteration
+            obj.updateRatio = 1e-2;         % the long term ratio and the short term ratio to stop iteration
+            obj.updateRatioLast = 1e-3;     % the last topology update ratio
+            obj.updateLast = 0;
+            obj.updateLastLoss = 1e2;       % times the lossMin
+            
+            obj.maxIter = 3000;
+            obj.thsTopo = 0.05;
             obj.Topo = ~obj.topoPrior;
             obj.Tvec = logical(obj.matOfColDE(obj.Topo));
             obj.numGrad.del = obj.numFIM.del; % the number of branches that should be disconnected
@@ -1282,6 +1302,7 @@ classdef caseDistributionSystemMeasure < caseDistributionSystem
             
             % evaluate the minimum loss
             obj = evaluateLossMin(obj);
+            obj.updateLastLoss = obj.updateLastLoss * obj.lossMin;
             
             % begin the iteration loop
             obj.iter = 1;
@@ -1299,9 +1320,24 @@ classdef caseDistributionSystemMeasure < caseDistributionSystem
             obj.isConverge = 0;
             obj.isSecond = false;
             obj.isFirst = false;
+            obj.step = obj.stepInit;
             
             while (obj.iter <= obj.maxIter && obj.isConverge <= 2)
                 disp(obj.iter);
+                % whether to stop iteration and update the topology
+                if ((obj.iter > obj.updateStart + obj.updateLast ...
+                        && mean(obj.lossChain(1, obj.iter-3*obj.updateStep:obj.iter-2*obj.updateStep)) ...
+                        / mean(obj.lossChain(1, obj.iter-2*obj.updateStep:obj.iter-obj.updateStep)) ...
+                        < (1 + obj.updateRatio)...
+                        && obj.lossChain(1, obj.iter-2) / obj.lossChain(1, obj.iter-1) ...
+                        < (1 + obj.updateRatio)...
+                        && obj.lossChain(1, obj.iter-1) < obj.updateLastLoss))...
+                        || (obj.iter > 1 + obj.updateLast && obj.loss.total < obj.lossMin)...
+                        || ((obj.iter > 31 + obj.updateLast) ...
+                        && all(diff(obj.lossChain(1, obj.iter-30:obj.iter-1))>0))
+                    obj = updateTopoIter(obj);
+                    continue;
+                end
 %                 profile on;
 %                 % do the pseudo PF
 %                 if ~all(obj.isMeasure.Va(2:end)) ...
@@ -1313,12 +1349,10 @@ classdef caseDistributionSystemMeasure < caseDistributionSystem
                 obj = collectPar(obj);
                 % build the Hessian
                 obj = buildMeasure(obj);
-%                 obj = buildHessian(obj);
                 obj.lossChain(:, obj.iter) = ...
                     [obj.loss.total; obj.loss.P; obj.loss.Q; ...
                     obj.loss.Vm; obj.loss.Va];
                 % implement the re-weight techique.
-                obj.gradOrigin = obj.grad;
                 obj = tuneGradient(obj);
                 % update the parameters
                 obj.isFirst = false;
@@ -1335,6 +1369,50 @@ classdef caseDistributionSystemMeasure < caseDistributionSystem
             obj.maxD2Chain(:, obj.iter:end) = [];
             obj.D2D1Chain(:, obj.iter:end) = [];
             
+        end
+        
+        function obj = updateTopoIter(obj)
+            % This method update the topology in the iteration process
+            
+            % We collect the parameter of the last step, because we have
+            % the regret strategy
+            obj.iter = obj.iter - 1;
+            par = obj.parChain(:, obj.iter);
+            G = par(1:obj.numGrad.G);
+            B = par(1+obj.numGrad.G:obj.numGrad.G+obj.numGrad.B);
+            obj.dataO.G = obj.colToMatDE(G, obj.numBus);
+            obj.dataO.B = obj.colToMatDE(B, obj.numBus);
+            Vm = par(1+obj.numGrad.G+obj.numGrad.B:obj.numGrad.G+obj.numGrad.B+obj.numGrad.Vm);
+            Va = par(1+obj.numGrad.G+obj.numGrad.B+obj.numGrad.Vm:end);
+            obj.dataO.Vm(2:end, :) = reshape(Vm, [], obj.numBus-1)'; % exclude the source bus
+            obj.dataO.Va(2:end, :) = reshape(Va, [], obj.numBus-1)'; % exclude the source bus
+            
+            % We update the topo
+            diagEle = sum(abs(obj.dataO.G)) / 2;
+            ratio1 = abs(bsxfun(@rdivide, obj.dataO.G, diagEle));
+            ratio2 = abs(bsxfun(@rdivide, obj.dataO.G, diagEle'));
+            ratio = max(ratio1, ratio2);
+            TopoNext = ratio > obj.thsTopo;
+            numDisconnect = sum(sum(triu(obj.Topo) - triu(TopoNext)));
+            fprintf('We disconnect %d branches\n', numDisconnect);
+            obj.Topo = TopoNext;
+            obj.Tvec = logical(obj.matOfColDE(obj.Topo));
+            obj.dataO.G(~obj.Topo) = 0;
+            obj.dataO.B(~obj.Topo) = 0;
+            
+            % we update some hyper-parameters
+            obj.numGrad.del = sum(~obj.Tvec);
+            if numDisconnect == 0
+                if obj.updateRatio == obj.updateRatioLast
+                    obj.isConverge = 3;
+                else
+                    obj.updateRatio = obj.updateRatioLast;
+                end
+            end
+            obj.updateLast = obj.iter-1;
+            obj.step = obj.stepInit;
+            obj.vaPseudoWeight = obj.vaPseudoWeightInit;
+%             obj.updateLastLoss = obj.lossChain(1, obj.iter);
         end
         
         function obj = evaluateLossMin(obj)
@@ -1356,7 +1434,7 @@ classdef caseDistributionSystemMeasure < caseDistributionSystem
             id = [id_GB; true(obj.numGrad.Vm+obj.numGrad.Va, 1)];
             
             % whether jump back to the last step
-            if obj.iter > 1 && obj.lossChain(1, obj.iter) > obj.lossChain(1, obj.iter-1) * obj.regretRatio % obj.isSecond && 
+            if obj.iter-obj.updateLast > 1 && obj.lossChain(1, obj.iter) > obj.lossChain(1, obj.iter-1) * obj.regretRatio % obj.isSecond && 
                 obj.isSecond = false;
                 obj.isFirst = true;
                 obj.iter = obj.iter - 1;
@@ -1375,9 +1453,11 @@ classdef caseDistributionSystemMeasure < caseDistributionSystem
             end
             % update the delta value
             if ~obj.isFirst % the non regret mode
-                try
+                if obj.iter > 1 + obj.updateLast
+%                 try
                     moment = obj.gradPast * obj.momentRatio + obj.grad * (1-obj.momentRatio);
-                catch
+                else
+%                 catch
                     moment = obj.grad;
                 end
     %             obj.gradPast = moment;
@@ -1412,7 +1492,7 @@ classdef caseDistributionSystemMeasure < caseDistributionSystem
                 obj.lastState.step = obj.step;
                     
                 if ratio > obj.lambda * obj.ratioMax % first order mode
-                    obj.lambda = obj.lambdaCompen * ratio / obj.ratioMax;
+%                     obj.lambda = obj.lambdaCompen * ratio / obj.ratioMax;
                     obj.isBoundChain(obj.iter) = true;
                     obj.isSecond = false;
                     
@@ -1423,8 +1503,8 @@ classdef caseDistributionSystemMeasure < caseDistributionSystem
                     delta = delta1 * obj.lambda/(1+obj.lambda) + delta2 * 1/(1+obj.lambda);
                 end
             else % the regret mode
-                ratio = maxD2 / maxD1;
-                obj.lambda = obj.lambdaCompen * ratio / obj.ratioMax;
+%                 ratio = maxD2 / maxD1;
+%                 obj.lambda = obj.lambdaCompen * ratio / obj.ratioMax;
                 obj.isBoundChain(obj.iter) = true;
                 
                 delta = obj.step * obj.grad(id);
@@ -1491,7 +1571,7 @@ classdef caseDistributionSystemMeasure < caseDistributionSystem
 %             end
             % update the lambda and the step length
             if ~obj.isFirst
-                try % I think we should use PD control here, currently it is only D control
+                if obj.iter > 1 + obj.updateLast
                     if obj.lossChain(1, obj.iter) < obj.lossChain(1, obj.iter-1)
     %                     ratio = (obj.lossChain(1, obj.iter-1) / obj.lossChain(1, obj.iter));
                         obj.step = min(obj.step * obj.deRatio, obj.stepMax);
@@ -1512,7 +1592,6 @@ classdef caseDistributionSystemMeasure < caseDistributionSystem
     %                     obj.lambda = min(obj.lambda * (1.1+dRatio), obj.lambdaMax);
     %                     obj.step = max(obj.step / (1.1+dRatio), obj.stepMin);
                     end
-                catch
                 end
             end
 %             if obj.iter > 1 % I think we should use PD control here, currently it is only D control
@@ -1537,7 +1616,7 @@ classdef caseDistributionSystemMeasure < caseDistributionSystem
             obj.maxD2Chain(obj.iter) = maxD2;
             
             % adjust vaPseudoWeight
-            if maxD2 > obj.maxD2Upper
+            if obj.iter > 1 + obj.updateLast && maxD2 > obj.maxD2Upper
                 obj.vaPseudoWeight = 1;
             end
 %             if maxD2 > obj.maxD2Upper
@@ -1550,9 +1629,9 @@ classdef caseDistributionSystemMeasure < caseDistributionSystem
 %             obj.secondChain(obj.iter) = obj.second;   
 %             obj.lambdaMax = log10(max(obj.loss.total, obj.lossMin * 10) / obj.lossMin) * 1000;
             % converge or not
-            if obj.loss.total < obj.lossMin
-                obj.isConverge = 3;
-            end
+%             if obj.loss.total < obj.lossMin
+%                 obj.isConverge = 3;
+%             end
         end
         
         function obj = buildJacobian(obj)
