@@ -213,11 +213,11 @@ classdef caseDistributionSystem < handle
             obj.isMeasure.P = true(obj.numBus, 1);
             obj.isMeasure.Q = true(obj.numBus, 1);
             obj.isMeasure.Vm = true(obj.numBus, 1);
-            obj.isMeasure.Va = false(obj.numBus, 1); % false
+            obj.isMeasure.Va = true(obj.numBus, 1); % false
             obj.isMeasure.Vm(1) = false;
             obj.isMeasure.Va(1) = false;
 %             obj.isMeasure.Va(4) = false;
-            obj.isMeasure.Va(2:5) = true(length(2:5), 1);
+%             obj.isMeasure.Va(2:5) = true(length(2:5), 1);
 %             obj.isMeasure.Q(2:3) = false(2, 1);
 %             obj.isMeasure.P(6:7) = false(2, 1);
             % Set the tolerance of the modified Cholesky decomposition
@@ -288,7 +288,7 @@ classdef caseDistributionSystem < handle
             obj.numFIM.Va = obj.numSnap * (obj.numBus - 1);
             obj.numFIM.Sum = obj.numFIM.G + obj.numFIM.B + obj.numFIM.Vm + obj.numFIM.Va;
             
-            obj.FIM = zeros(obj.numFIM.Sum, obj.numFIM.Sum);
+%             obj.FIM = zeros(obj.numFIM.Sum, obj.numFIM.Sum);
 %             obj.FIMP = sparse(obj.numFIM.Sum, obj.numFIM.Sum);
 %             obj.FIMQ = sparse(obj.numFIM.Sum, obj.numFIM.Sum);
 %             obj.FIMVm = sparse(obj.numFIM.Sum, obj.numFIM.Sum);
