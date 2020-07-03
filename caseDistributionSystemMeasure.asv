@@ -105,6 +105,7 @@ classdef caseDistributionSystemMeasure < caseDistributionSystem
         updateRatio         % the long term ratio and the short term ratio to stop iteration
         updateLast          % the last update step
         updateLastLoss      % the last loss function
+        updateRatioLast     % the last topology update ratio
     end
     
     methods
@@ -189,9 +190,9 @@ classdef caseDistributionSystemMeasure < caseDistributionSystem
             
             pt = 1;
             % calculate the sub-matrix of P of all snapshots and all buses
-            for i = 1:obj.numBus
-                if obj.isMeasure.P(i)
-                    for j = 1:obj.numSnap
+            for j = 1:obj.numSnap
+                for i = 1:obj.numBus
+                    if obj.isMeasure.P(i)
 %                         profile on
                         obj = approximateFIMP(obj, i, j, pt);
                         pt = pt + 1;
@@ -202,9 +203,9 @@ classdef caseDistributionSystemMeasure < caseDistributionSystem
             end
 %             obj.A_FIM = obj.A_FIM + full(obj.A_FIMP);
             % calculate the sub-matrix of Q of all snapshots and all buses
-            for i = 1:obj.numBus
-                if obj.isMeasure.Q(i)
-                    for j = 1:obj.numSnap
+            for j = 1:obj.numSnap
+                for i = 1:obj.numBus
+                    if obj.isMeasure.Q(i)
                         obj = approximateFIMQ(obj, i, j, pt);
                         pt = pt + 1;
                     end
@@ -212,9 +213,9 @@ classdef caseDistributionSystemMeasure < caseDistributionSystem
             end
 %             obj.A_FIM = obj.A_FIM + full(obj.A_FIMQ);
             % calculate the sub-matrix of Vm of all snapshots and all buses
-            for i = 1:obj.numBus
-                if obj.isMeasure.Vm(i)
-                    for j = 1:obj.numSnap
+            for j = 1:obj.numSnap
+                for i = 1:obj.numBus
+                    if obj.isMeasure.Vm(i)
                         obj = buildFIMVm(obj, i, j, pt);
                         pt = pt + 1;
                     end
@@ -222,9 +223,9 @@ classdef caseDistributionSystemMeasure < caseDistributionSystem
             end
 %             obj.A_FIM = obj.A_FIM + full(obj.FIMVm);
             % calculate the sub-matrix of Va of all snapshots and all buses
-            for i = 1:obj.numBus
-                if obj.isMeasure.Va(i)
-                    for j = 1:obj.numSnap
+            for j = 1:obj.numSnap
+                for i = 1:obj.numBus
+                    if obj.isMeasure.Va(i)
                         obj = buildFIMVa(obj, i, j, pt);
                         pt = pt + 1;
                     end
@@ -274,7 +275,7 @@ classdef caseDistributionSystemMeasure < caseDistributionSystem
             H_Vm(:, snap) = h_Vm;
             % remove the source bus whose magnitude is not the state variable
             H_Vm(1, :) = []; 
-            h_VmLarge = reshape(H_Vm', [], 1);
+            h_VmLarge = reshape(H_Vm, [], 1);
             h(obj.numFIM.G+obj.numFIM.B+1:obj.numFIM.G+obj.numFIM.B+obj.numFIM.Vm) = h_VmLarge;
             
             % Va
@@ -285,7 +286,7 @@ classdef caseDistributionSystemMeasure < caseDistributionSystem
             H_Va(:, snap) = h_Va;
             % remove the source bus whose magnitude is not the state variable
             H_Va(1, :) = []; 
-            h_VaLarge = reshape(H_Va', [], 1);
+            h_VaLarge = reshape(H_Va, [], 1);
             h(obj.numFIM.G+obj.numFIM.B+obj.numFIM.Vm+1:end) = h_VaLarge;
             
             % build FIMP
@@ -334,7 +335,7 @@ classdef caseDistributionSystemMeasure < caseDistributionSystem
             H_Vm(:, snap) = h_Vm;
             % remove the source bus whose magnitude is not the state variable
             H_Vm(1, :) = []; 
-            h_VmLarge = reshape(H_Vm', [], 1);
+            h_VmLarge = reshape(H_Vm, [], 1);
             h(obj.numFIM.G+obj.numFIM.B+1:obj.numFIM.G+obj.numFIM.B+obj.numFIM.Vm) = h_VmLarge;
             
             % Va
@@ -345,7 +346,7 @@ classdef caseDistributionSystemMeasure < caseDistributionSystem
             H_Va(:, snap) = h_Va;
             % remove the source bus whose magnitude is not the state variable
             H_Va(1, :) = []; 
-            h_VaLarge = reshape(H_Va', [], 1);
+            h_VaLarge = reshape(H_Va, [], 1);
             h(obj.numFIM.G+obj.numFIM.B+obj.numFIM.Vm+1:end) = h_VaLarge;
             
             % build FIMQ
@@ -425,12 +426,14 @@ classdef caseDistributionSystemMeasure < caseDistributionSystem
                 obj.boundA.Vm = ...
                     obj.boundA.total(obj.numFIM.G+obj.numFIM.B+1-2*obj.numFIM.del...
                     :obj.numFIM.G+obj.numFIM.B+obj.numFIM.Vm-2*obj.numFIM.del) / obj.k.vm;
+                obj.boundA.VmBus = mean(reshape(obj.boundA.Vm, obj.numBus-1, obj.numSnap), 2);
                 obj.boundA.total(obj.numFIM.G+obj.numFIM.B+1-2*obj.numFIM.del...
                     :obj.numFIM.G+obj.numFIM.B+obj.numFIM.Vm-2*obj.numFIM.del)...
                     = obj.boundA.Vm;
                 obj.boundA.Va = ...
                     obj.boundA.total(obj.numFIM.G+obj.numFIM.B+obj.numFIM.Vm+1-2*obj.numFIM.del...
                     :obj.numFIM.Sum-2*obj.numFIM.del) / obj.k.va;
+                obj.boundA.VaBus = mean(reshape(obj.boundA.Va, obj.numBus-1, obj.numSnap), 2);
                 obj.boundA.total(obj.numFIM.G+obj.numFIM.B+obj.numFIM.Vm+1-2*obj.numFIM.del...
                     :obj.numFIM.Sum-2*obj.numFIM.del)...
                     = obj.boundA.Va;
@@ -1130,9 +1133,9 @@ classdef caseDistributionSystemMeasure < caseDistributionSystem
             par(1:obj.numGrad.G) = obj.matOfColDE(obj.dataO.G);
             par(1+obj.numGrad.G:obj.numGrad.G+obj.numGrad.B) = obj.matOfColDE(obj.dataO.B);
             par(1+obj.numGrad.G+obj.numGrad.B:obj.numGrad.G+obj.numGrad.B+obj.numGrad.Vm) = ...
-                reshape(obj.dataO.Vm(2:end,:)', [], 1); % we assume the value of the source bus is already known
+                reshape(obj.dataO.Vm(2:end,:), [], 1); % we assume the value of the source bus is already known
             par(1+obj.numGrad.G+obj.numGrad.B+obj.numGrad.Vm:end) = ...
-                reshape(obj.dataO.Va(2:end,:)', [], 1);
+                reshape(obj.dataO.Va(2:end,:), [], 1);
             obj.parChain(:, obj.iter) = par;
         end
         
@@ -1229,7 +1232,7 @@ classdef caseDistributionSystemMeasure < caseDistributionSystem
             
             obj.lambda = 1e1; % the proportion of first order gradient
             obj.lambdaMin = 0.1;
-            obj.lambdaMax = 1e3;%1e3 1e2;
+            obj.lambdaMax = 1e2;%1e3 1e2;
             obj.ratioMax = 1e3; % the ratio of second order / first order (final value)1e4
             obj.ratioMaxConst = 1e4; % 1e4
 %             obj.ratioMaxMax = 1e4;
@@ -1254,11 +1257,12 @@ classdef caseDistributionSystemMeasure < caseDistributionSystem
             
             obj.updateStart = 20;           % the start iteration number to update the topology
             obj.updateStep = 6;             % the number of steps we calculate the judge whether stop iteration
-            obj.updateRatio = 1e-3;         % the long term ratio and the short term ratio to stop iteration
+            obj.updateRatio = 1e-2;         % the long term ratio and the short term ratio to stop iteration
+            obj.updateRatioLast = 1e-3;     % the last topology update ratio
             obj.updateLast = 0;
             obj.updateLastLoss = 1e2;       % times the lossMin
             
-            obj.maxIter = 2000;
+            obj.maxIter = 3000;
             obj.thsTopo = 0.05;
             obj.Topo = ~obj.topoPrior;
             obj.Tvec = logical(obj.matOfColDE(obj.Topo));
@@ -1331,8 +1335,8 @@ classdef caseDistributionSystemMeasure < caseDistributionSystem
                         < (1 + obj.updateRatio)...
                         && obj.lossChain(1, obj.iter-1) < obj.updateLastLoss))...
                         || (obj.iter > 1 + obj.updateLast && obj.loss.total < obj.lossMin)...
-                        || ((obj.iter > 15 + obj.updateLast) ...
-                        && all(diff(obj.lossChain(1, obj.iter-2:obj.iter-1))>0))
+                        || ((obj.iter > 31 + obj.updateLast) ...
+                        && all(diff(obj.lossChain(1, obj.iter-30:obj.iter-1))>0))
                     obj = updateTopoIter(obj);
                     continue;
                 end
@@ -1401,7 +1405,11 @@ classdef caseDistributionSystemMeasure < caseDistributionSystem
             % we update some hyper-parameters
             obj.numGrad.del = sum(~obj.Tvec);
             if numDisconnect == 0
-                obj.isConverge = 3;
+                if obj.updateRatio == obj.updateRatioLast
+                    obj.isConverge = 3;
+                else
+                    obj.updateRatio = obj.updateRatioLast;
+                end
             end
             obj.updateLast = obj.iter-1;
             obj.step = obj.stepInit;
@@ -1486,7 +1494,7 @@ classdef caseDistributionSystemMeasure < caseDistributionSystem
                 obj.lastState.step = obj.step;
                     
                 if ratio > obj.lambda * obj.ratioMax % first order mode
-                    obj.lambda = obj.lambdaCompen * ratio / obj.ratioMax;
+%                     obj.lambda = obj.lambdaCompen * ratio / obj.ratioMax;
                     obj.isBoundChain(obj.iter) = true;
                     obj.isSecond = false;
                     
@@ -1497,8 +1505,8 @@ classdef caseDistributionSystemMeasure < caseDistributionSystem
                     delta = delta1 * obj.lambda/(1+obj.lambda) + delta2 * 1/(1+obj.lambda);
                 end
             else % the regret mode
-                ratio = maxD2 / maxD1;
-                obj.lambda = obj.lambdaCompen * ratio / obj.ratioMax;
+%                 ratio = maxD2 / maxD1;
+%                 obj.lambda = obj.lambdaCompen * ratio / obj.ratioMax;
                 obj.isBoundChain(obj.iter) = true;
                 
                 delta = obj.step * obj.grad(id);
@@ -1904,6 +1912,7 @@ classdef caseDistributionSystemMeasure < caseDistributionSystem
                 Qest = (GBThetaQ * obj.dataO.Vm(:, i)) .* obj.dataO.Vm(:, i);
                 % the id of Vm and Va
                 obj.idVmVa = obj.numSnap * (0:obj.numBus-2) + i;
+                obj.id
                 
                 % calculate the sub-vector of P of all buses
                 for j = 1:obj.numBus

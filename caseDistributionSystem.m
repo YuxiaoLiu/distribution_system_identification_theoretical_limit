@@ -299,9 +299,9 @@ classdef caseDistributionSystem < handle
             obj.M = zeros(obj.numFIM.Sum, obj.numMeasure);
             pt = 1;
             % calculate the sub-matrix of P of all snapshots and all buses
-            for i = 1:obj.numBus
-                if obj.isMeasure.P(i)
-                    for j = 1:obj.numSnap
+            for j = 1:obj.numSnap
+                for i = 1:obj.numBus
+                    if obj.isMeasure.P(i)
 %                         profile on;
                         obj = buildFIMP(obj, i, j, pt);
                         pt = pt + 1;
@@ -312,9 +312,9 @@ classdef caseDistributionSystem < handle
             end
 %             obj.FIM = obj.FIM + full(obj.FIMP);
             % calculate the sub-matrix of Q of all snapshots and all buses
-            for i = 1:obj.numBus
-                if obj.isMeasure.Q(i)
-                    for j = 1:obj.numSnap
+            for j = 1:obj.numSnap
+                for i = 1:obj.numBus
+                    if obj.isMeasure.Q(i)
                         obj = buildFIMQ(obj, i, j, pt);
                         pt = pt + 1;
                     end
@@ -322,9 +322,9 @@ classdef caseDistributionSystem < handle
             end
 %             obj.FIM = obj.FIM + full(obj.FIMQ);
             % calculate the sub-matrix of Vm of all snapshots and all buses
-            for i = 1:obj.numBus
-                if obj.isMeasure.Vm(i)
-                    for j = 1:obj.numSnap
+            for j = 1:obj.numSnap
+                for i = 1:obj.numBus
+                    if obj.isMeasure.Vm(i)
                         obj = buildFIMVm(obj, i, j, pt);
                         pt = pt + 1;
                     end
@@ -332,9 +332,9 @@ classdef caseDistributionSystem < handle
             end
 %             obj.FIM = obj.FIM + full(obj.FIMVm);
             % calculate the sub-matrix of Va of all snapshots and all buses
-            for i = 1:obj.numBus
-                if obj.isMeasure.Va(i)
-                    for j = 1:obj.numSnap
+            for j = 1:obj.numSnap
+                for i = 1:obj.numBus
+                    if obj.isMeasure.Va(i)
                         obj = buildFIMVa(obj, i, j, pt);
                         pt = pt + 1;
                     end
@@ -413,7 +413,7 @@ classdef caseDistributionSystem < handle
             H_Vm(:, snap) = h_Vm;
             % remove the source bus whose magnitude is not the state variable
             H_Vm(1, :) = []; 
-            h_VmLarge = reshape(H_Vm', [], 1);
+            h_VmLarge = reshape(H_Vm, [], 1);
             h(obj.numFIM.G+obj.numFIM.B+1:obj.numFIM.G+obj.numFIM.B+obj.numFIM.Vm) = h_VmLarge;
             
             % Va
@@ -424,7 +424,7 @@ classdef caseDistributionSystem < handle
             H_Va(:, snap) = h_Va;
             % remove the source bus whose magnitude is not the state variable
             H_Va(1, :) = []; 
-            h_VaLarge = reshape(H_Va', [], 1);
+            h_VaLarge = reshape(H_Va, [], 1);
             h(obj.numFIM.G+obj.numFIM.B+obj.numFIM.Vm+1:end) = h_VaLarge;
             
             % build FIMP
@@ -473,7 +473,7 @@ classdef caseDistributionSystem < handle
             H_Vm(:, snap) = h_Vm;
             % remove the source bus whose magnitude is not the state variable
             H_Vm(1, :) = []; 
-            h_VmLarge = reshape(H_Vm', [], 1);
+            h_VmLarge = reshape(H_Vm, [], 1);
             h(obj.numFIM.G+obj.numFIM.B+1:obj.numFIM.G+obj.numFIM.B+obj.numFIM.Vm) = h_VmLarge;
             
             % Va
@@ -484,7 +484,7 @@ classdef caseDistributionSystem < handle
             H_Va(:, snap) = h_Va;
             % remove the source bus whose magnitude is not the state variable
             H_Va(1, :) = []; 
-            h_VaLarge = reshape(H_Va', [], 1);
+            h_VaLarge = reshape(H_Va, [], 1);
             h(obj.numFIM.G+obj.numFIM.B+obj.numFIM.Vm+1:end) = h_VaLarge;
             
             % build FIMQ
@@ -501,7 +501,7 @@ classdef caseDistributionSystem < handle
             H_Vm(bus, snap) = 1 / obj.sigma.Vm(bus) / obj.k.vm;
             % remove the source bus whose magnitude is not the state variable
             H_Vm(1, :) = []; 
-            h_VmLarge = reshape(H_Vm', [], 1);
+            h_VmLarge = reshape(H_Vm, [], 1);
             h(obj.numFIM.G+obj.numFIM.B+1:obj.numFIM.G+obj.numFIM.B+obj.numFIM.Vm) = h_VmLarge;
             
             obj.M(:, pt) = h;
@@ -516,7 +516,7 @@ classdef caseDistributionSystem < handle
             H_Va(bus, snap) = 1 / obj.sigma.Va(bus) / obj.k.va;
             % remove the source bus whose magnitude is not the state variable
             H_Va(1, :) = []; 
-            h_VaLarge = reshape(H_Va', [], 1);
+            h_VaLarge = reshape(H_Va, [], 1);
             h(obj.numFIM.G+obj.numFIM.B+obj.numFIM.Vm+1:end) = h_VaLarge;
             
             obj.M(:, pt) = h;
@@ -612,12 +612,14 @@ classdef caseDistributionSystem < handle
                 obj.bound.Vm = ...
                     obj.bound.total(obj.numFIM.G+obj.numFIM.B+1-2*obj.numFIM.del...
                     :obj.numFIM.G+obj.numFIM.B+obj.numFIM.Vm-2*obj.numFIM.del) / obj.k.vm;
+                obj.bound.VmBus = mean(reshape(obj.bound.Vm, obj.numBus-1, obj.numSnap), 2);
                 obj.bound.total(obj.numFIM.G+obj.numFIM.B+1-2*obj.numFIM.del...
                     :obj.numFIM.G+obj.numFIM.B+obj.numFIM.Vm-2*obj.numFIM.del)...
                     = obj.bound.Vm;
                 obj.bound.Va = ...
                     obj.bound.total(obj.numFIM.G+obj.numFIM.B+obj.numFIM.Vm+1-2*obj.numFIM.del...
                     :obj.numFIM.Sum-2*obj.numFIM.del) / obj.k.va;
+                obj.bound.VaBus = mean(reshape(obj.bound.Va, obj.numBus-1, obj.numSnap), 2);
                 obj.bound.total(obj.numFIM.G+obj.numFIM.B+obj.numFIM.Vm+1-2*obj.numFIM.del...
                     :obj.numFIM.Sum-2*obj.numFIM.del)...
                     = obj.bound.Va;

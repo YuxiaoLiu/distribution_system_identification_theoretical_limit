@@ -190,9 +190,9 @@ classdef caseDistributionSystemMeasure < caseDistributionSystem
             
             pt = 1;
             % calculate the sub-matrix of P of all snapshots and all buses
-            for i = 1:obj.numBus
-                if obj.isMeasure.P(i)
-                    for j = 1:obj.numSnap
+            for j = 1:obj.numSnap
+                for i = 1:obj.numBus
+                    if obj.isMeasure.P(i)
 %                         profile on
                         obj = approximateFIMP(obj, i, j, pt);
                         pt = pt + 1;
@@ -203,9 +203,9 @@ classdef caseDistributionSystemMeasure < caseDistributionSystem
             end
 %             obj.A_FIM = obj.A_FIM + full(obj.A_FIMP);
             % calculate the sub-matrix of Q of all snapshots and all buses
-            for i = 1:obj.numBus
-                if obj.isMeasure.Q(i)
-                    for j = 1:obj.numSnap
+            for j = 1:obj.numSnap
+                for i = 1:obj.numBus
+                    if obj.isMeasure.Q(i)
                         obj = approximateFIMQ(obj, i, j, pt);
                         pt = pt + 1;
                     end
@@ -213,9 +213,9 @@ classdef caseDistributionSystemMeasure < caseDistributionSystem
             end
 %             obj.A_FIM = obj.A_FIM + full(obj.A_FIMQ);
             % calculate the sub-matrix of Vm of all snapshots and all buses
-            for i = 1:obj.numBus
-                if obj.isMeasure.Vm(i)
-                    for j = 1:obj.numSnap
+            for j = 1:obj.numSnap
+                for i = 1:obj.numBus
+                    if obj.isMeasure.Vm(i)
                         obj = buildFIMVm(obj, i, j, pt);
                         pt = pt + 1;
                     end
@@ -223,9 +223,9 @@ classdef caseDistributionSystemMeasure < caseDistributionSystem
             end
 %             obj.A_FIM = obj.A_FIM + full(obj.FIMVm);
             % calculate the sub-matrix of Va of all snapshots and all buses
-            for i = 1:obj.numBus
-                if obj.isMeasure.Va(i)
-                    for j = 1:obj.numSnap
+            for j = 1:obj.numSnap
+                for i = 1:obj.numBus
+                    if obj.isMeasure.Va(i)
                         obj = buildFIMVa(obj, i, j, pt);
                         pt = pt + 1;
                     end
@@ -275,7 +275,7 @@ classdef caseDistributionSystemMeasure < caseDistributionSystem
             H_Vm(:, snap) = h_Vm;
             % remove the source bus whose magnitude is not the state variable
             H_Vm(1, :) = []; 
-            h_VmLarge = reshape(H_Vm', [], 1);
+            h_VmLarge = reshape(H_Vm, [], 1);
             h(obj.numFIM.G+obj.numFIM.B+1:obj.numFIM.G+obj.numFIM.B+obj.numFIM.Vm) = h_VmLarge;
             
             % Va
@@ -286,7 +286,7 @@ classdef caseDistributionSystemMeasure < caseDistributionSystem
             H_Va(:, snap) = h_Va;
             % remove the source bus whose magnitude is not the state variable
             H_Va(1, :) = []; 
-            h_VaLarge = reshape(H_Va', [], 1);
+            h_VaLarge = reshape(H_Va, [], 1);
             h(obj.numFIM.G+obj.numFIM.B+obj.numFIM.Vm+1:end) = h_VaLarge;
             
             % build FIMP
@@ -335,7 +335,7 @@ classdef caseDistributionSystemMeasure < caseDistributionSystem
             H_Vm(:, snap) = h_Vm;
             % remove the source bus whose magnitude is not the state variable
             H_Vm(1, :) = []; 
-            h_VmLarge = reshape(H_Vm', [], 1);
+            h_VmLarge = reshape(H_Vm, [], 1);
             h(obj.numFIM.G+obj.numFIM.B+1:obj.numFIM.G+obj.numFIM.B+obj.numFIM.Vm) = h_VmLarge;
             
             % Va
@@ -346,7 +346,7 @@ classdef caseDistributionSystemMeasure < caseDistributionSystem
             H_Va(:, snap) = h_Va;
             % remove the source bus whose magnitude is not the state variable
             H_Va(1, :) = []; 
-            h_VaLarge = reshape(H_Va', [], 1);
+            h_VaLarge = reshape(H_Va, [], 1);
             h(obj.numFIM.G+obj.numFIM.B+obj.numFIM.Vm+1:end) = h_VaLarge;
             
             % build FIMQ
@@ -426,12 +426,14 @@ classdef caseDistributionSystemMeasure < caseDistributionSystem
                 obj.boundA.Vm = ...
                     obj.boundA.total(obj.numFIM.G+obj.numFIM.B+1-2*obj.numFIM.del...
                     :obj.numFIM.G+obj.numFIM.B+obj.numFIM.Vm-2*obj.numFIM.del) / obj.k.vm;
+                obj.boundA.VmBus = mean(reshape(obj.boundA.Vm, obj.numBus-1, obj.numSnap), 2);
                 obj.boundA.total(obj.numFIM.G+obj.numFIM.B+1-2*obj.numFIM.del...
                     :obj.numFIM.G+obj.numFIM.B+obj.numFIM.Vm-2*obj.numFIM.del)...
                     = obj.boundA.Vm;
                 obj.boundA.Va = ...
                     obj.boundA.total(obj.numFIM.G+obj.numFIM.B+obj.numFIM.Vm+1-2*obj.numFIM.del...
                     :obj.numFIM.Sum-2*obj.numFIM.del) / obj.k.va;
+                obj.boundA.VaBus = mean(reshape(obj.boundA.Va, obj.numBus-1, obj.numSnap), 2);
                 obj.boundA.total(obj.numFIM.G+obj.numFIM.B+obj.numFIM.Vm+1-2*obj.numFIM.del...
                     :obj.numFIM.Sum-2*obj.numFIM.del)...
                     = obj.boundA.Va;
@@ -1131,9 +1133,9 @@ classdef caseDistributionSystemMeasure < caseDistributionSystem
             par(1:obj.numGrad.G) = obj.matOfColDE(obj.dataO.G);
             par(1+obj.numGrad.G:obj.numGrad.G+obj.numGrad.B) = obj.matOfColDE(obj.dataO.B);
             par(1+obj.numGrad.G+obj.numGrad.B:obj.numGrad.G+obj.numGrad.B+obj.numGrad.Vm) = ...
-                reshape(obj.dataO.Vm(2:end,:)', [], 1); % we assume the value of the source bus is already known
+                reshape(obj.dataO.Vm(2:end,:), [], 1); % we assume the value of the source bus is already known
             par(1+obj.numGrad.G+obj.numGrad.B+obj.numGrad.Vm:end) = ...
-                reshape(obj.dataO.Va(2:end,:)', [], 1);
+                reshape(obj.dataO.Va(2:end,:), [], 1);
             obj.parChain(:, obj.iter) = par;
         end
         
@@ -1384,8 +1386,8 @@ classdef caseDistributionSystemMeasure < caseDistributionSystem
             obj.dataO.B = obj.colToMatDE(B, obj.numBus);
             Vm = par(1+obj.numGrad.G+obj.numGrad.B:obj.numGrad.G+obj.numGrad.B+obj.numGrad.Vm);
             Va = par(1+obj.numGrad.G+obj.numGrad.B+obj.numGrad.Vm:end);
-            obj.dataO.Vm(2:end, :) = reshape(Vm, [], obj.numBus-1)'; % exclude the source bus
-            obj.dataO.Va(2:end, :) = reshape(Va, [], obj.numBus-1)'; % exclude the source bus
+            obj.dataO.Vm(2:end, :) = reshape(Vm, obj.numBus-1, []); % exclude the source bus
+            obj.dataO.Va(2:end, :) = reshape(Va, obj.numBus-1, []); % exclude the source bus
             
             % We update the topo
             diagEle = sum(abs(obj.dataO.G)) / 2;
@@ -1527,8 +1529,8 @@ classdef caseDistributionSystemMeasure < caseDistributionSystem
             
             Vm = par(1+obj.numGrad.G+obj.numGrad.B:obj.numGrad.G+obj.numGrad.B+obj.numGrad.Vm);
             Va = par(1+obj.numGrad.G+obj.numGrad.B+obj.numGrad.Vm:end);
-            obj.dataO.Vm(2:end, :) = reshape(Vm, [], obj.numBus-1)'; % exclude the source bus
-            obj.dataO.Va(2:end, :) = reshape(Va, [], obj.numBus-1)'; % exclude the source bus
+            obj.dataO.Vm(2:end, :) = reshape(Vm, obj.numBus-1, []); % exclude the source bus
+            obj.dataO.Va(2:end, :) = reshape(Va, obj.numBus-1, []); % exclude the source bus
             
 %             if obj.isGB
 % %                 delta = zeros(obj.numGrad.G+obj.numGrad.B, 1);
@@ -1909,7 +1911,8 @@ classdef caseDistributionSystemMeasure < caseDistributionSystem
                 % Q estimate
                 Qest = (GBThetaQ * obj.dataO.Vm(:, i)) .* obj.dataO.Vm(:, i);
                 % the id of Vm and Va
-                obj.idVmVa = obj.numSnap * (0:obj.numBus-2) + i;
+%                 obj.idVmVa = obj.numSnap * (0:obj.numBus-2) + i;
+                obj.idVmVa = (i-1) * (obj.numBus-1) + 1: (i-1) * (obj.numBus-1) + obj.numBus-1;
                 
                 % calculate the sub-vector of P of all buses
                 for j = 1:obj.numBus
