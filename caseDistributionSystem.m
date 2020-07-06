@@ -43,6 +43,14 @@ classdef caseDistributionSystem < handle
         
         M                   % the measurement matrix
         numMeasure          % the number of measurements
+        
+        mRow                % the row id of Measurement matrix
+        mCol                % the col id of Measurement matrix
+        mVal                % the value id of Measurement matrix
+        spt                 % the point of the sparse vectors
+        
+        idGB                % the address of G and B matrix
+        idVmVa              % the id of Vm and Va
     end
     
     methods
@@ -288,6 +296,22 @@ classdef caseDistributionSystem < handle
             obj.numFIM.Va = obj.numSnap * (obj.numBus - 1);
             obj.numFIM.Sum = obj.numFIM.G + obj.numFIM.B + obj.numFIM.Vm + obj.numFIM.Va;
             
+            %initialize the sparsify measurement matrix
+            numVector = obj.numSnap * obj.numBus * ((obj.numBus-1)*4*2 + 2);
+            obj.mRow = zeros(1, numVector);
+            obj.mCol = zeros(1, numVector);
+            obj.mVal = zeros(1, numVector);
+            obj.spt = 1;
+            
+            % Initialize the idGB
+            obj.idGB = zeros(obj.numBus, obj.numBus);
+            id = 1;
+            for i = 1:obj.numBus
+                obj.idGB(i, i+1:end) = id:id+obj.numBus-i-1;
+                obj.idGB(i+1:end, i) = id:id+obj.numBus-i-1;
+                id = id+obj.numBus-i;
+            end
+            
 %             obj.FIM = zeros(obj.numFIM.Sum, obj.numFIM.Sum);
 %             obj.FIMP = sparse(obj.numFIM.Sum, obj.numFIM.Sum);
 %             obj.FIMQ = sparse(obj.numFIM.Sum, obj.numFIM.Sum);
@@ -296,10 +320,12 @@ classdef caseDistributionSystem < handle
             
             obj.numMeasure = obj.numSnap *...
                 sum([obj.isMeasure.P;obj.isMeasure.Q;obj.isMeasure.Vm;obj.isMeasure.Va]);
-            obj.M = zeros(obj.numFIM.Sum, obj.numMeasure);
+%             obj.M = zeros(obj.numFIM.Sum, obj.numMeasure);
             pt = 1;
             % calculate the sub-matrix of P of all snapshots and all buses
             for j = 1:obj.numSnap
+                % the id of Vm and Va
+                obj.idVmVa = (obj.numBus-1)*(j-1)+1 : (obj.numBus-1)*(j-1)+obj.numBus-1;
                 for i = 1:obj.numBus
                     if obj.isMeasure.P(i)
 %                         profile on;
@@ -313,6 +339,8 @@ classdef caseDistributionSystem < handle
 %             obj.FIM = obj.FIM + full(obj.FIMP);
             % calculate the sub-matrix of Q of all snapshots and all buses
             for j = 1:obj.numSnap
+                % the id of Vm and Va
+                obj.idVmVa = (obj.numBus-1)*(j-1)+1 : (obj.numBus-1)*(j-1)+obj.numBus-1;
                 for i = 1:obj.numBus
                     if obj.isMeasure.Q(i)
                         obj = buildFIMQ(obj, i, j, pt);
@@ -323,6 +351,8 @@ classdef caseDistributionSystem < handle
 %             obj.FIM = obj.FIM + full(obj.FIMQ);
             % calculate the sub-matrix of Vm of all snapshots and all buses
             for j = 1:obj.numSnap
+                % the id of Vm and Va
+                obj.idVmVa = (obj.numBus-1)*(j-1)+1 : (obj.numBus-1)*(j-1)+obj.numBus-1;
                 for i = 1:obj.numBus
                     if obj.isMeasure.Vm(i)
                         obj = buildFIMVm(obj, i, j, pt);
@@ -333,6 +363,8 @@ classdef caseDistributionSystem < handle
 %             obj.FIM = obj.FIM + full(obj.FIMVm);
             % calculate the sub-matrix of Va of all snapshots and all buses
             for j = 1:obj.numSnap
+                % the id of Vm and Va
+                obj.idVmVa = (obj.numBus-1)*(j-1)+1 : (obj.numBus-1)*(j-1)+obj.numBus-1;
                 for i = 1:obj.numBus
                     if obj.isMeasure.Va(i)
                         obj = buildFIMVa(obj, i, j, pt);
@@ -341,7 +373,11 @@ classdef caseDistributionSystem < handle
                 end
             end
 %             obj.FIM = obj.FIM + full(obj.FIMVa);
-            Ms = sparse(obj.M);
+            obj.mRow(obj.spt:end) = [];
+            obj.mCol(obj.spt:end) = [];
+            obj.mVal(obj.spt:end) = [];
+            Ms = sparse(obj.mRow, obj.mCol, obj.mVal, obj.numFIM.Sum, obj.numMeasure);
+%             Ms = sparse(obj.M);
             obj.FIM = Ms * Ms';
         end
         
@@ -384,25 +420,27 @@ classdef caseDistributionSystem < handle
 %             obj.Q_delta = [obj.Q_delta deltaQ_];
             
             % G matrix
-            H_G = zeros(obj.numBus, obj.numBus);
+%             H_G = zeros(obj.numBus, obj.numBus);
             h_GG = obj.data.Vm(bus, snap) * obj.data.Vm(:, snap)' .* cos(theta_ij') / obj.k.G;
             h_GG = h_GG -  obj.data.Vm(bus, snap)^2 / obj.k.G;
-            H_G(bus, :) = h_GG;
-            h_G = obj.matToColDE(H_G);
-            assert (length(h_G) == obj.numFIM.G);
-            h(1:obj.numFIM.G) = h_G;
+            h(obj.idGB(bus, [1:bus-1 bus+1:end])) = h_GG([1:bus-1 bus+1:end]);
+%             H_G(bus, :) = h_GG;
+%             h_G = obj.matToColDE(H_G);
+%             assert (length(h_G) == obj.numFIM.G);
+%             h(1:obj.numFIM.G) = h_G;
             
             % B matrix
-            H_B = zeros(obj.numBus, obj.numBus);
+%             H_B = zeros(obj.numBus, obj.numBus);
             h_BB = obj.data.Vm(bus, snap) * obj.data.Vm(:, snap)' .* sin(theta_ij') / obj.k.B;
-            H_B(bus, :) = h_BB;
-            h_B = obj.matToColDE(H_B);
-            assert (length(h_B) == obj.numFIM.B);
-            h(obj.numFIM.G+1:obj.numFIM.G+obj.numFIM.B) = h_B;
+            h(obj.numFIM.G+obj.idGB(bus, [1:bus-1 bus+1:end])) = h_BB([1:bus-1 bus+1:end]);
+%             H_B(bus, :) = h_BB;
+%             h_B = obj.matToColDE(H_B);
+%             assert (length(h_B) == obj.numFIM.B);
+%             h(obj.numFIM.G+1:obj.numFIM.G+obj.numFIM.B) = h_B;
             
             % Vm
             % the first order term of other Vm
-            H_Vm = zeros(obj.numBus, obj.numSnap);
+%             H_Vm = zeros(obj.numBus, obj.numSnap);
             h_Vm = obj.data.Vm(bus, snap) * GBThetaP(:, bus) / obj.k.vm;
             % the second order term of Vm(bus)
             h_Vm(bus) = 2*obj.data.Vm(bus, snap) * GBThetaP(bus, bus) / obj.k.vm;
@@ -410,26 +448,34 @@ classdef caseDistributionSystem < handle
             fOrderVm = obj.data.Vm(:, snap) .* GBThetaP(:, bus) / obj.k.vm;
             fOrderVm(bus) = 0;
             h_Vm(bus) = h_Vm(bus) + sum(fOrderVm);
-            H_Vm(:, snap) = h_Vm;
+            h(obj.numFIM.G+obj.numFIM.B+obj.idVmVa) = h_Vm(2:end);
+%             H_Vm(:, snap) = h_Vm;
             % remove the source bus whose magnitude is not the state variable
-            H_Vm(1, :) = []; 
-            h_VmLarge = reshape(H_Vm, [], 1);
-            h(obj.numFIM.G+obj.numFIM.B+1:obj.numFIM.G+obj.numFIM.B+obj.numFIM.Vm) = h_VmLarge;
+%             H_Vm(1, :) = []; 
+%             h_VmLarge = reshape(H_Vm, [], 1);
+%             h(obj.numFIM.G+obj.numFIM.B+1:obj.numFIM.G+obj.numFIM.B+obj.numFIM.Vm) = h_VmLarge;
             
             % Va
-            H_Va = zeros(obj.numBus, obj.numSnap);
+%             H_Va = zeros(obj.numBus, obj.numSnap);
             h_Va = obj.data.Vm(bus, snap) * obj.data.Vm(:, snap) .* GBThetaQ(:, bus) / obj.k.va;
             h_Va(bus) = ( - obj.data.Vm(bus, snap)^2 * obj.data.B(bus, bus)...
                        - obj.data.Q(bus, snap)) / obj.k.va;
-            H_Va(:, snap) = h_Va;
+            h(obj.numFIM.G+obj.numFIM.B+obj.numFIM.Vm+obj.idVmVa) = h_Va(2:end);
+%             H_Va(:, snap) = h_Va;
             % remove the source bus whose magnitude is not the state variable
-            H_Va(1, :) = []; 
-            h_VaLarge = reshape(H_Va, [], 1);
-            h(obj.numFIM.G+obj.numFIM.B+obj.numFIM.Vm+1:end) = h_VaLarge;
+%             H_Va(1, :) = []; 
+%             h_VaLarge = reshape(H_Va, [], 1);
+%             h(obj.numFIM.G+obj.numFIM.B+obj.numFIM.Vm+1:end) = h_VaLarge;
             
             % build FIMP
             h = h / obj.sigma.P(bus);
-            obj.M(:, pt) = h;
+            [col,row,val] = find(h');
+            l = length(val);
+            obj.mRow(obj.spt:obj.spt+l-1) = row;
+            obj.mCol(obj.spt:obj.spt+l-1) = col*pt;
+            obj.mVal(obj.spt:obj.spt+l-1) = val;
+            obj.spt = obj.spt + l;
+%             obj.M(:, pt) = h;
 %             FIMPThis = h * h';
 %             obj.FIMP = obj.FIMP + FIMPThis;
         end
@@ -437,7 +483,7 @@ classdef caseDistributionSystem < handle
         function obj = buildFIMQ(obj, bus, snap, pt)
             % This method build the Q part of FIM a selected bus and a selected snapshot. 
             
-            h = sparse(obj.numFIM.Sum, 1);
+            h = zeros(obj.numFIM.Sum, 1);
             theta_ij = obj.data.Va(bus, snap) - obj.data.Va(:, snap);
             Theta_ij = repmat(obj.data.Va(:, snap), 1, obj.numBus) - repmat(obj.data.Va(:, snap)', obj.numBus, 1);
             % G_ij\cos(\Theta_ij)+B_ij\sin(\Theta_ij)
@@ -446,23 +492,25 @@ classdef caseDistributionSystem < handle
             GBThetaQ = obj.data.G .* sin(Theta_ij) - obj.data.B .* cos(Theta_ij);
             
             % G matrix
-            H_G = zeros(obj.numBus, obj.numBus);
+%             H_G = zeros(obj.numBus, obj.numBus);
             h_GG = obj.data.Vm(bus, snap) * obj.data.Vm(:, snap)' .* sin(theta_ij') / obj.k.G;
-            H_G(bus, :) = h_GG;
-            h_G = obj.matToColDE(H_G);
-            h(1:obj.numFIM.G) = h_G;
+            h(obj.idGB(bus, [1:bus-1 bus+1:end])) = h_GG([1:bus-1 bus+1:end]);
+%             H_G(bus, :) = h_GG;
+%             h_G = obj.matToColDE(H_G);
+%             h(1:obj.numFIM.G) = h_G;
             
             % B matrix
-            H_B = zeros(obj.numBus, obj.numBus);
+%             H_B = zeros(obj.numBus, obj.numBus);
             h_BB =  - obj.data.Vm(bus, snap) * obj.data.Vm(:, snap)' .* cos(theta_ij') / obj.k.B;
             h_BB = h_BB + obj.data.Vm(bus, snap)^2 / obj.k.B; % the equivilance of diagonal elements
-            H_B(bus, :) = h_BB;
-            h_B = obj.matToColDE(H_B);
-            h(obj.numFIM.G+1:obj.numFIM.G+obj.numFIM.B) = h_B;
+            h(obj.numFIM.G+obj.idGB(bus, [1:bus-1 bus+1:end])) = h_BB([1:bus-1 bus+1:end]);
+%             H_B(bus, :) = h_BB;
+%             h_B = obj.matToColDE(H_B);
+%             h(obj.numFIM.G+1:obj.numFIM.G+obj.numFIM.B) = h_B;
             
             % Vm
             % the first order term of other Vm
-            H_Vm = zeros(obj.numBus, obj.numSnap);
+%             H_Vm = zeros(obj.numBus, obj.numSnap);
             h_Vm = obj.data.Vm(bus, snap) * GBThetaQ(:, bus) / obj.k.vm;
             % the second order term of Vm(bus)
             h_Vm(bus) = 2*obj.data.Vm(bus, snap) * GBThetaQ(bus, bus) / obj.k.vm;
@@ -470,56 +518,75 @@ classdef caseDistributionSystem < handle
             fOrderVm = obj.data.Vm(:, snap) .* GBThetaQ(:, bus) / obj.k.vm;
             fOrderVm(bus) = 0;
             h_Vm(bus) = h_Vm(bus) + sum(fOrderVm);
-            H_Vm(:, snap) = h_Vm;
-            % remove the source bus whose magnitude is not the state variable
-            H_Vm(1, :) = []; 
-            h_VmLarge = reshape(H_Vm, [], 1);
-            h(obj.numFIM.G+obj.numFIM.B+1:obj.numFIM.G+obj.numFIM.B+obj.numFIM.Vm) = h_VmLarge;
+            h(obj.numFIM.G+obj.numFIM.B+obj.idVmVa) = h_Vm(2:end);
+%             H_Vm(:, snap) = h_Vm;
+%             % remove the source bus whose magnitude is not the state variable
+%             H_Vm(1, :) = []; 
+%             h_VmLarge = reshape(H_Vm, [], 1);
+%             h(obj.numFIM.G+obj.numFIM.B+1:obj.numFIM.G+obj.numFIM.B+obj.numFIM.Vm) = h_VmLarge;
             
             % Va
-            H_Va = zeros(obj.numBus, obj.numSnap);
+%             H_Va = zeros(obj.numBus, obj.numSnap);
             h_Va = - obj.data.Vm(bus, snap) * obj.data.Vm(:, snap) .* GBThetaP(:, bus) / obj.k.va;
             h_Va(bus) = (- obj.data.Vm(bus, snap)^2 * obj.data.G(bus, bus) ...
                         + obj.data.P(bus, snap)) / obj.k.va;
-            H_Va(:, snap) = h_Va;
+            h(obj.numFIM.G+obj.numFIM.B+obj.numFIM.Vm+obj.idVmVa) = h_Va(2:end);
+%             H_Va(:, snap) = h_Va;
             % remove the source bus whose magnitude is not the state variable
-            H_Va(1, :) = []; 
-            h_VaLarge = reshape(H_Va, [], 1);
-            h(obj.numFIM.G+obj.numFIM.B+obj.numFIM.Vm+1:end) = h_VaLarge;
+%             H_Va(1, :) = []; 
+%             h_VaLarge = reshape(H_Va, [], 1);
+%             h(obj.numFIM.G+obj.numFIM.B+obj.numFIM.Vm+1:end) = h_VaLarge;
             
             % build FIMQ
             h = h / obj.sigma.Q(bus);
-            obj.M(:, pt) = h;
+            [col,row,val] = find(h');
+            l = length(val);
+            obj.mRow(obj.spt:obj.spt+l-1) = row;
+            obj.mCol(obj.spt:obj.spt+l-1) = col*pt;
+            obj.mVal(obj.spt:obj.spt+l-1) = val;
+            obj.spt = obj.spt + l;
 %             FIMQThis = h * h';
 %             obj.FIMQ = obj.FIMQ + FIMQThis;
         end
         
-        function obj = buildFIMVm(obj, bus, snap, pt)
+        function obj = buildFIMVm(obj, bus, ~, pt)
             % This method build the Vm part of FIM a selected bus. 
-            h = zeros(obj.numFIM.Sum, 1);
-            H_Vm = zeros(obj.numBus, obj.numSnap);
-            H_Vm(bus, snap) = 1 / obj.sigma.Vm(bus) / obj.k.vm;
-            % remove the source bus whose magnitude is not the state variable
-            H_Vm(1, :) = []; 
-            h_VmLarge = reshape(H_Vm, [], 1);
-            h(obj.numFIM.G+obj.numFIM.B+1:obj.numFIM.G+obj.numFIM.B+obj.numFIM.Vm) = h_VmLarge;
-            
-            obj.M(:, pt) = h;
+%             h = sparse(obj.numFIM.Sum, 1);
+%             H_Vm = sparse(obj.numBus, obj.numSnap);
+%             H_Vm(bus, snap) = 1 / obj.sigma.Vm(bus) / obj.k.vm;
+%             % remove the source bus whose magnitude is not the state variable
+%             H_Vm(1, :) = []; 
+%             h_VmLarge = reshape(H_Vm, [], 1);
+%             h(obj.numFIM.G+obj.numFIM.B+1:obj.numFIM.G+obj.numFIM.B+obj.numFIM.Vm) = h_VmLarge;
+%             
+% %             obj.M(:, pt) = h;
+%             [col,row,val] = find(h');
+            l = 1;
+            obj.mRow(obj.spt:obj.spt+l-1) = obj.numFIM.G+obj.numFIM.B+obj.idVmVa(bus-1);
+            obj.mCol(obj.spt:obj.spt+l-1) = pt;
+            obj.mVal(obj.spt:obj.spt+l-1) = obj.sigma.Vm(bus).^(-1);
+            obj.spt = obj.spt + l;
 %             FIMVmThis = h * h';
 %             obj.FIMVm = obj.FIMVm + FIMVmThis;
         end
         
-        function obj = buildFIMVa(obj, bus, snap, pt)
+        function obj = buildFIMVa(obj, bus, ~, pt)
             % This method build the Va part of FIM a selected bus. 
-            h = zeros(obj.numFIM.Sum, 1);
-            H_Va = zeros(obj.numBus, obj.numSnap);
-            H_Va(bus, snap) = 1 / obj.sigma.Va(bus) / obj.k.va;
-            % remove the source bus whose magnitude is not the state variable
-            H_Va(1, :) = []; 
-            h_VaLarge = reshape(H_Va, [], 1);
-            h(obj.numFIM.G+obj.numFIM.B+obj.numFIM.Vm+1:end) = h_VaLarge;
-            
-            obj.M(:, pt) = h;
+%             h = sparse(obj.numFIM.Sum, 1);
+%             H_Va = sparse(obj.numBus, obj.numSnap);
+%             H_Va(bus, snap) = 1 / obj.sigma.Va(bus) / obj.k.va;
+%             % remove the source bus whose magnitude is not the state variable
+%             H_Va(1, :) = []; 
+%             h_VaLarge = reshape(H_Va, [], 1);
+%             h(obj.numFIM.G+obj.numFIM.B+obj.numFIM.Vm+1:end) = h_VaLarge;
+%             
+%             [col,row,val] = find(h');
+            l = 1;
+            obj.mRow(obj.spt:obj.spt+l-1) = obj.numFIM.G+obj.numFIM.B+obj.numFIM.Vm+obj.idVmVa(bus-1);
+            obj.mCol(obj.spt:obj.spt+l-1) = pt;
+            obj.mVal(obj.spt:obj.spt+l-1) = obj.sigma.Va(bus).^(-1);
+            obj.spt = obj.spt + l;
+%             obj.M(:, pt) = h;
 %             FIMVaThis = h * h';
 %             obj.FIMVa = obj.FIMVa + FIMVaThis;
         end

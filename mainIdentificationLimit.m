@@ -1,5 +1,6 @@
 % This is the main code of the theoretical limit of distribution system
 % identification.
+% This code require the package of Matpower and OpenDss
 
 %% We set some hyper parameters
 clear;clc;
@@ -67,13 +68,14 @@ caseDS = caseDS.setTopo;
 caseDS = caseDS.buildFIM;
 % caseDS = caseDS.calBound(caseDS.topoPrior);
 caseDS = caseDS.updateTopo(caseDS.topoPrior);
+% profile off
+% profile viewer
 % caseDS = caseDS.iterateY;
 caseDS = caseDS.setTopo;
 caseDS = caseDS.preEvaluation(prior);
 caseDS = caseDS.approximateFIM(k);
 caseDS = caseDS.calABound(false, caseDS.topoPrior);
-% profile off
-% profile viewer
+
 % caseDS = caseDS.initValue;
 % caseDS = caseDS.identifyMCMCEIO;
 % caseDS = caseDS.identifyMCMCEIV;
