@@ -5,8 +5,8 @@
 %% We set some hyper parameters
 clear;clc;
 warning off
-caseName = 'case3_dist';     % the case name    'case3_dist' 'case33bw'  'case141'
-numSnap = 10;             % the number of snapshot
+caseName = 'case33bw';     % the case name    'case3_dist' 'case33bw'  'case141'
+numSnap = 120;             % the number of snapshot
 range.P = 1.2;               % the deviation range of active load 0.6
 range.Q = 0.3;             % the deviation range of reactive load to active load 0.2
 
@@ -16,8 +16,8 @@ ratio.Q = 0.001;
 ratio.Vm = 0.001;%0.00001  0.00000001
 ratio.Va = 0.0001;%0.000005
 
-% if we only compute the bound of admittance matrix
-admittanceOnly = false;
+% if we use the sparse option
+sparseOption = true;
 
 % the tolerance of setting a branch to be zero
 topoTol = 0.05;
@@ -38,10 +38,10 @@ end
 % the enlarge factor to maintain the numerical stability
 switch caseName
     case 'case33bw'
-        k.G = 50;%5;%1000;
-        k.B = 100;%10;%5000;
-        k.vm = 1000;%100;%100000;
-        k.va = 10000;%1000;%1000000;
+        k.G = 1;%50;%5;%1000;
+        k.B = 1;%100;%10;%5000;
+        k.vm = 1;%1000;%100;%100000;
+        k.va = 1;%10000;%1000;%1000000;
         ratio.Pmin = 0.05; % the minimum P measurement noise compared with the source bus
         ratio.Qmin = 0.05;
     otherwise
@@ -74,7 +74,7 @@ caseDS = caseDS.updateTopo(caseDS.topoPrior);
 caseDS = caseDS.setTopo;
 caseDS = caseDS.preEvaluation(prior);
 caseDS = caseDS.approximateFIM(k);
-caseDS = caseDS.calABound(false, caseDS.topoPrior);
+caseDS = caseDS.calABound(true, caseDS.topoPrior);
 
 % caseDS = caseDS.initValue;
 % caseDS = caseDS.identifyMCMCEIO;
@@ -85,6 +85,6 @@ caseDS = caseDS.identifyOptLMPower;
 caseDS = caseDS.evalErr;
 % caseDS = caseDS.identifyOptNewton;
 % caseDS = caseDS.buildFIM(k);
-% caseDS = caseDS.updateTopo(topoTol, admittanceOnly);
+% caseDS = caseDS.updateTopo(topoTol, sparseOption);
 % profile off;
 % profile viewer;

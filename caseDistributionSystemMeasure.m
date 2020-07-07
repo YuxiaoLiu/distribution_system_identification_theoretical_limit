@@ -323,7 +323,7 @@ classdef caseDistributionSystemMeasure < caseDistributionSystem
             
             % build FIMP
             h = h / obj.sigma.P(bus);
-            [col,row,val] = find(h');
+            [row,col,val] = find(h);
             l = length(val);
             obj.mRow(obj.spt:obj.spt+l-1) = row;
             obj.mCol(obj.spt:obj.spt+l-1) = col*pt;
@@ -394,7 +394,7 @@ classdef caseDistributionSystemMeasure < caseDistributionSystem
             % build FIMQ
             h = h / obj.sigma.Q(bus);
             obj.M(:, pt) = h;
-            [col,row,val] = find(h');
+            [row,col,val] = find(h);
             l = length(val);
             obj.mRow(obj.spt:obj.spt+l-1) = row;
             obj.mCol(obj.spt:obj.spt+l-1) = col*pt;
@@ -408,13 +408,13 @@ classdef caseDistributionSystemMeasure < caseDistributionSystem
             % this method calculate the bound from the A_FIM matrix;
             
             if nargin == 3
-                obj.admittanceOnly = varargin{1};
+                obj.sparseOption = varargin{1};
                 obj.topoPrior = varargin{2};
             elseif nargin == 2
-                obj.admittanceOnly = varargin{1};
+                obj.sparseOption = varargin{1};
                 obj.topoPrior = false(obj.numBus, obj.numBus);
             elseif nargin == 1
-                obj.admittanceOnly = false;
+                obj.sparseOption = true;
                 obj.topoPrior = false(obj.numBus, obj.numBus);
             end
             
@@ -425,14 +425,53 @@ classdef caseDistributionSystemMeasure < caseDistributionSystem
             obj.numFIM.del = sum(delCols)/2;
             
             % for [A B; B' C], we calculate A-B/C*B'
-            if obj.admittanceOnly
-                obj.numFIM.index = obj.numFIM.index(1:obj.numFIM.G+obj.numFIM.B);
-                A = obj.A_FIM(1:obj.numFIM.G+obj.numFIM.B, 1:obj.numFIM.G+obj.numFIM.B);
-                B = obj.A_FIM(1:obj.numFIM.G+obj.numFIM.B, obj.numFIM.G+obj.numFIM.B+1:end);
-                C = obj.A_FIM(obj.numFIM.G+obj.numFIM.B+1:end, obj.numFIM.G+obj.numFIM.B+1:end);
-                obj.A_FIM = A - B/C*B';
-                cov = obj.A_FIM(obj.numFIM.index, obj.numFIM.index)\eye(sum(obj.numFIM.index));
-                var = diag(cov);
+            if obj.sparseOption
+%                 obj.numFIM.index = obj.numFIM.index(1:obj.numFIM.G+obj.numFIM.B);
+%                 A = obj.A_FIM(1:obj.numFIM.G+obj.numFIM.B, 1:obj.numFIM.G+obj.numFIM.B);
+%                 B = obj.A_FIM(1:obj.numFIM.G+obj.numFIM.B, obj.numFIM.G+obj.numFIM.B+1:end);
+%                 C = obj.A_FIM(obj.numFIM.G+obj.numFIM.B+1:end, obj.numFIM.G+obj.numFIM.B+1:end);
+%                 AFIM = A - B/C*B';
+                cov = inv(full(obj.A_FIM(obj.numFIM.index, obj.numFIM.index)));
+                varTrue = diag(cov);
+                idCell = mat2cell((obj.numBus-1)*ones(2,2*obj.numSnap), [1 1], [obj.numSnap obj.numSnap]);
+                Cell = mat2cell(obj.A_FIM(obj.numFIM.index, obj.numFIM.index), ...
+                    [obj.numFIM.G+obj.numFIM.B-2*obj.numFIM.del obj.numFIM.Vm+obj.numFIM.Va], ...
+                    [obj.numFIM.G+obj.numFIM.B-2*obj.numFIM.del obj.numFIM.Vm+obj.numFIM.Va]);
+                Cell{1,2} = mat2cell(Cell{1,2},...
+                    obj.numFIM.G+obj.numFIM.B-2*obj.numFIM.del, [obj.numFIM.Vm obj.numFIM.Va]);
+                Cell{1,2} = cellfun(@mat2cell, Cell{1,2}, ...
+                    {obj.numFIM.G+obj.numFIM.B-2*obj.numFIM.del obj.numFIM.G+obj.numFIM.B-2*obj.numFIM.del},...
+                    idCell(1,:),  'UniformOutput',false); % get the sub matrces
+                Cell{2,2} = mat2cell(Cell{2,2}, ...
+                    [obj.numFIM.Vm obj.numFIM.Va], [obj.numFIM.Vm obj.numFIM.Va]);
+                Cell{2,2} = cellfun(@mat2cell, Cell{2,2}, idCell, idCell, 'UniformOutput',false); % get the sub matrces
+                
+                % get the inversion of Cell{2,2}, we separate it into a
+                % single function
+                Cell{2,2} = cellfun(@obj.cell2diag, Cell{2,2},'UniformOutput',false); % extract the diagonal elements
+                invC22 = cell(2,2);
+                % [D E; E' F]
+                disp('calculating invC22');
+                invC22F = cellfun(@inv, Cell{2,2}{2,2},'UniformOutput',false);
+                invC22{1,1} = cellfun(@(a,b,c,d) d-a*b*c, Cell{2,2}{1,2}, invC22F, Cell{2,2}{2,1},Cell{2,2}{1,1},'UniformOutput',false);
+                invC22{1,1} = cellfun(@inv, invC22{1,1}, 'UniformOutput',false);
+                invC22{1,2} = cellfun(@(a,b,c) -a*b*c, invC22{1,1}, Cell{2,2}{1,2}, invC22F, 'UniformOutput',false);
+                invC22{2,1} = cellfun(@(a) a', invC22{1,2}, 'UniformOutput',false);
+                invC22{2,2} = cellfun(@(a,b,c,d) a+a*b*c*d*a, invC22F, Cell{2,2}{2,1}, invC22{1,1}, Cell{2,2}{1,2}, 'UniformOutput',false);
+                
+                % calculate the inv(A-B/CB')
+                disp('calculating (A-B/CB)^-1');
+                BCB = obj.cellMulSum(Cell{1,2}{1}, invC22{1,1}, Cell{1,2}{1});
+                BCB = BCB + obj.cellMulSum(Cell{1,2}{2}, invC22{2,1}, Cell{1,2}{1});
+                BCB = BCB + obj.cellMulSum(Cell{1,2}{1}, invC22{1,2}, Cell{1,2}{2});
+                BCB = BCB + obj.cellMulSum(Cell{1,2}{2}, invC22{2,2}, Cell{1,2}{2});
+                
+                ABC = inv(Cell{1,1} - BCB); % inv(A-B/CB')
+                diagABC = diag(ABC);
+                % Calculate the diag of C
+                diagC = obj.cellGetDiag(invC22);
+                % Calculate the var
+                var = [diagABC; diagC];
             else
                 cov = full(obj.A_FIM(obj.numFIM.index, obj.numFIM.index))\eye(sum(obj.numFIM.index));
                 var = diag(cov);
@@ -446,12 +485,12 @@ classdef caseDistributionSystemMeasure < caseDistributionSystem
             end
             if min(var) < 0
                 var = abs(var);
-                cov = cov - diag(diag(cov)) + diag(var);
+%                 cov = cov - diag(diag(cov)) + diag(var);
                 fprintf('We use the absolute value of the variance.\n');
             end
             
             obj.boundA.total = sqrt(var);
-            obj.boundA.cov = cov;
+%             obj.boundA.cov = cov;
             
             boundG = zeros(obj.numFIM.G, 1);
             boundG(obj.numFIM.index(1:obj.numFIM.G)) = obj.boundA.total(1:obj.numFIM.G-obj.numFIM.del) / obj.k.G;
@@ -470,22 +509,20 @@ classdef caseDistributionSystemMeasure < caseDistributionSystem
             obj.boundA.G_relative_col = reshape(obj.boundA.G_relative, [], 1);
             obj.boundA.B_relative_col = reshape(obj.boundA.B_relative, [], 1);
             
-            if ~obj.admittanceOnly
-                obj.boundA.Vm = ...
-                    obj.boundA.total(obj.numFIM.G+obj.numFIM.B+1-2*obj.numFIM.del...
-                    :obj.numFIM.G+obj.numFIM.B+obj.numFIM.Vm-2*obj.numFIM.del) / obj.k.vm;
-                obj.boundA.VmBus = mean(reshape(obj.boundA.Vm, obj.numBus-1, obj.numSnap), 2);
+            obj.boundA.Vm = ...
                 obj.boundA.total(obj.numFIM.G+obj.numFIM.B+1-2*obj.numFIM.del...
-                    :obj.numFIM.G+obj.numFIM.B+obj.numFIM.Vm-2*obj.numFIM.del)...
-                    = obj.boundA.Vm;
-                obj.boundA.Va = ...
-                    obj.boundA.total(obj.numFIM.G+obj.numFIM.B+obj.numFIM.Vm+1-2*obj.numFIM.del...
-                    :obj.numFIM.Sum-2*obj.numFIM.del) / obj.k.va;
-                obj.boundA.VaBus = mean(reshape(obj.boundA.Va, obj.numBus-1, obj.numSnap), 2);
+                :obj.numFIM.G+obj.numFIM.B+obj.numFIM.Vm-2*obj.numFIM.del) / obj.k.vm;
+            obj.boundA.VmBus = mean(reshape(obj.boundA.Vm, obj.numBus-1, obj.numSnap), 2);
+            obj.boundA.total(obj.numFIM.G+obj.numFIM.B+1-2*obj.numFIM.del...
+                :obj.numFIM.G+obj.numFIM.B+obj.numFIM.Vm-2*obj.numFIM.del)...
+                = obj.boundA.Vm;
+            obj.boundA.Va = ...
                 obj.boundA.total(obj.numFIM.G+obj.numFIM.B+obj.numFIM.Vm+1-2*obj.numFIM.del...
-                    :obj.numFIM.Sum-2*obj.numFIM.del)...
-                    = obj.boundA.Va;
-            end
+                :obj.numFIM.Sum-2*obj.numFIM.del) / obj.k.va;
+            obj.boundA.VaBus = mean(reshape(obj.boundA.Va, obj.numBus-1, obj.numSnap), 2);
+            obj.boundA.total(obj.numFIM.G+obj.numFIM.B+obj.numFIM.Vm+1-2*obj.numFIM.del...
+                :obj.numFIM.Sum-2*obj.numFIM.del)...
+                = obj.boundA.Va;
         end
         
         function obj = identifyTopo(obj)
