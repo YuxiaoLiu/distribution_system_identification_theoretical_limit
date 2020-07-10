@@ -198,15 +198,15 @@ classdef caseDistributionSystem < handle
                         obj.topoPrior(idCol(i), idRow(i)) = false;
                     end
                 case 'case141'
-%                     obj.topoPrior = true(obj.numBus, obj.numBus);
-%                     obj.topoPrior(obj.data.G ~= 0) = false;
-%                     idBranchOptional = obj.mpc.branch(:, 11) == 0;
-%                     idRow = obj.mpc.branch(idBranchOptional, 1);
-%                     idCol = obj.mpc.branch(idBranchOptional, 2);
-%                     for i = 1:length(idRow)
-%                         obj.topoPrior(idRow(i), idCol(i)) = false;
-%                         obj.topoPrior(idCol(i), idRow(i)) = false;
-%                     end
+                    obj.topoPrior = true(obj.numBus, obj.numBus);
+                    obj.topoPrior(obj.data.G ~= 0) = false;
+                    idBranchOptional = obj.mpc.branch(:, 11) == 0;
+                    idRow = obj.mpc.branch(idBranchOptional, 1);
+                    idCol = obj.mpc.branch(idBranchOptional, 2);
+                    for i = 1:length(idRow)
+                        obj.topoPrior(idRow(i), idCol(i)) = false;
+                        obj.topoPrior(idCol(i), idRow(i)) = false;
+                    end
             end
             
             obj.topoPrior = false(obj.numBus, obj.numBus); % do not consider any topology priors

@@ -393,7 +393,7 @@ classdef caseDistributionSystemMeasure < caseDistributionSystem
             
             % build FIMQ
             h = h / obj.sigma.Q(bus);
-            obj.M(:, pt) = h;
+%             obj.M(:, pt) = h;
             [row,col,val] = find(h);
             l = length(val);
             obj.mRow(obj.spt:obj.spt+l-1) = row;
@@ -431,8 +431,8 @@ classdef caseDistributionSystemMeasure < caseDistributionSystem
 %                 B = obj.A_FIM(1:obj.numFIM.G+obj.numFIM.B, obj.numFIM.G+obj.numFIM.B+1:end);
 %                 C = obj.A_FIM(obj.numFIM.G+obj.numFIM.B+1:end, obj.numFIM.G+obj.numFIM.B+1:end);
 %                 AFIM = A - B/C*B';
-                cov = inv(full(obj.A_FIM(obj.numFIM.index, obj.numFIM.index)));
-                varTrue = diag(cov);
+%                 cov = inv(full(obj.A_FIM(obj.numFIM.index, obj.numFIM.index)));
+%                 varTrue = diag(cov);
                 idCell = mat2cell((obj.numBus-1)*ones(2,2*obj.numSnap), [1 1], [obj.numSnap obj.numSnap]);
                 Cell = mat2cell(obj.A_FIM(obj.numFIM.index, obj.numFIM.index), ...
                     [obj.numFIM.G+obj.numFIM.B-2*obj.numFIM.del obj.numFIM.Vm+obj.numFIM.Va], ...
@@ -1347,7 +1347,7 @@ classdef caseDistributionSystemMeasure < caseDistributionSystem
             obj.updateLast = 0;
             obj.updateLastLoss = 1e2;       % times the lossMin
             
-            obj.maxIter = 3000;
+            obj.maxIter = 2000;
             obj.thsTopo = 0.05;
             obj.Topo = ~obj.topoPrior;
             obj.Tvec = logical(obj.matOfColDE(obj.Topo));
@@ -1957,10 +1957,12 @@ classdef caseDistributionSystemMeasure < caseDistributionSystem
         
         function obj = buildMeasure(obj)
             % build the measurement matrix
-            obj.H = zeros(obj.numGrad.Sum, obj.numGrad.Sum);
+            % clear some matrices to get enough memory
+            obj.A_FIM = [];
+            obj.FIM = [];
             obj.numMeasure = obj.numSnap *...
                 sum([obj.isMeasure.P;obj.isMeasure.Q;obj.isMeasure.Vm;obj.isMeasure.Va]);
-            obj.M = zeros(obj.numGrad.Sum, obj.numMeasure);
+%             obj.M = zeros(obj.numGrad.Sum, obj.numMeasure);
             % Initialize the gradient matrix
             obj.grad = zeros(obj.numGrad.Sum, 1);
             obj.gradP = zeros(obj.numGrad.Sum, 1);
@@ -1973,6 +1975,14 @@ classdef caseDistributionSystemMeasure < caseDistributionSystem
             obj.loss.Q = 0;
             obj.loss.Vm = 0;
             obj.loss.Va = 0;
+            
+            %initialize the sparsify measurement matrix
+            numVector = obj.numSnap * obj.numBus * ((obj.numBus-1)*4*2 + 2);
+            obj.mRow = zeros(1, numVector);
+            obj.mCol = zeros(1, numVector);
+            obj.mVal = zeros(1, numVector);
+            obj.spt = 1;
+            
             % Initialize the idGB
             obj.idGB = zeros(obj.numBus, obj.numBus);
             id = 1;
@@ -2047,7 +2057,10 @@ classdef caseDistributionSystemMeasure < caseDistributionSystem
             % collect the gradients, the losses, and compute the Hessian
             obj.grad = obj.gradP + obj.gradQ + obj.gradVm + obj.gradVa;
             obj.loss.total = obj.loss.P + obj.loss.Q + obj.loss.Vm + obj.loss.Va;
-            Ms = sparse(obj.M);
+            obj.mRow(obj.spt:end) = [];
+            obj.mCol(obj.spt:end) = [];
+            obj.mVal(obj.spt:end) = [];
+            Ms = sparse(obj.mRow, obj.mCol, obj.mVal, obj.numFIM.Sum, obj.numMeasure);
             obj.H = Ms * Ms';
         end
         
@@ -2096,7 +2109,13 @@ classdef caseDistributionSystemMeasure < caseDistributionSystem
 %             obj.M(:, pt) = obj.sigma.P(bus).^(-1)* obj.M(:, pt);
 %             g = obj.sigma.P(bus).^(-1) * g;
 %             assert(sum(abs(g-obj.M(:, pt))) < 1e-9);
-            obj.M(:, pt) = obj.sigma.P(bus).^(-1) * g;
+%             obj.M(:, pt) = obj.sigma.P(bus).^(-1) * g;
+            [row,col,val] = find(g);
+            l = length(val);
+            obj.mRow(obj.spt:obj.spt+l-1) = row;
+            obj.mCol(obj.spt:obj.spt+l-1) = col*pt;
+            obj.mVal(obj.spt:obj.spt+l-1) = val*obj.sigma.P(bus).^(-1);
+            obj.spt = obj.spt + l;
         end
         
         function obj = buildMeasureQ(obj, snap, bus, GBThetaP, GBThetaQ, Qest, pt)
@@ -2138,7 +2157,13 @@ classdef caseDistributionSystemMeasure < caseDistributionSystem
             obj.loss.Q = obj.loss.Q + lossThis^2 * obj.sigma.Q(bus).^(-2);
             gradQThis = obj.sigma.Q(bus).^(-2) * lossThis * g;
             obj.gradQ = obj.gradQ + gradQThis;
-            obj.M(:, pt) = obj.sigma.Q(bus).^(-1) * g;
+%             obj.M(:, pt) = obj.sigma.Q(bus).^(-1) * g;
+            [row,col,val] = find(g);
+            l = length(val);
+            obj.mRow(obj.spt:obj.spt+l-1) = row;
+            obj.mCol(obj.spt:obj.spt+l-1) = col*pt;
+            obj.mVal(obj.spt:obj.spt+l-1) = val*obj.sigma.Q(bus).^(-1);
+            obj.spt = obj.spt + l;
 %             HQThis = obj.sigma.Q(bus).^(-2) * (g * g');
 %             obj.HQ = obj.HQ + HQThis;
         end
@@ -2151,7 +2176,12 @@ classdef caseDistributionSystemMeasure < caseDistributionSystem
             obj.loss.Vm = obj.loss.Vm + lossThis^2 * obj.sigma.Vm(bus).^(-2);
             obj.gradVm(obj.numGrad.G+obj.numGrad.B+obj.idVmVa(bus-1)) = ...
                 obj.gradVm(obj.numGrad.G+obj.numGrad.B+obj.idVmVa(bus-1)) + obj.sigma.Vm(bus).^(-2) * lossThis;
-            obj.M(obj.numGrad.G+obj.numGrad.B+obj.idVmVa(bus-1), pt) = obj.sigma.Vm(bus).^(-1);
+%             obj.M(obj.numGrad.G+obj.numGrad.B+obj.idVmVa(bus-1), pt) = obj.sigma.Vm(bus).^(-1);
+            l = 1;
+            obj.mRow(obj.spt:obj.spt+l-1) = obj.numGrad.G+obj.numGrad.B+obj.idVmVa(bus-1);
+            obj.mCol(obj.spt:obj.spt+l-1) = pt;
+            obj.mVal(obj.spt:obj.spt+l-1) = obj.sigma.Vm(bus).^(-1);
+            obj.spt = obj.spt + l;
         end
         
         function obj = buildMeasureVa(obj, snap, bus, pt)
@@ -2162,7 +2192,12 @@ classdef caseDistributionSystemMeasure < caseDistributionSystem
             obj.loss.Va = obj.loss.Va + lossThis^2 * obj.sigma.Va(bus).^(-2);
             obj.gradVa(obj.numGrad.G+obj.numGrad.B+obj.numGrad.Vm+obj.idVmVa(bus-1)) = ...
                 obj.gradVa(obj.numGrad.G+obj.numGrad.B+obj.numGrad.Vm+obj.idVmVa(bus-1)) + obj.sigma.Va(bus).^(-2) * lossThis;
-            obj.M(obj.numGrad.G+obj.numGrad.B+obj.numGrad.Vm+obj.idVmVa(bus-1), pt) = obj.sigma.Va(bus).^(-1);
+%             obj.M(obj.numGrad.G+obj.numGrad.B+obj.numGrad.Vm+obj.idVmVa(bus-1), pt) = obj.sigma.Va(bus).^(-1);
+            l = 1;
+            obj.mRow(obj.spt:obj.spt+l-1) = obj.numGrad.G+obj.numGrad.B+obj.numGrad.Vm+obj.idVmVa(bus-1);
+            obj.mCol(obj.spt:obj.spt+l-1) = pt;
+            obj.mVal(obj.spt:obj.spt+l-1) = obj.sigma.Va(bus).^(-1);
+            obj.spt = obj.spt + l;
         end
         
         function obj = buildHessian(obj)

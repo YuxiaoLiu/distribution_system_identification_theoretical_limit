@@ -65,9 +65,9 @@ caseDS = caseDS.genOperateData;
 caseDS = caseDS.setAccuracy(ratio);
 caseDS = caseDS.setTopo;
 % profile on
-caseDS = caseDS.buildFIM;
-% caseDS = caseDS.calBound(caseDS.topoPrior);
-caseDS = caseDS.updateTopo(caseDS.topoPrior);
+% caseDS = caseDS.buildFIM;
+% % caseDS = caseDS.calBound(caseDS.topoPrior);
+% caseDS = caseDS.updateTopo(caseDS.topoPrior);
 % profile off
 % profile viewer
 % caseDS = caseDS.iterateY;
