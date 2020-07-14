@@ -51,6 +51,8 @@ classdef caseDistributionSystem < handle
         
         idGB                % the address of G and B matrix
         idVmVa              % the id of Vm and Va
+        idVm                % the id of Vm
+        idVa                % the id of Va
     end
     
     methods
@@ -345,7 +347,8 @@ classdef caseDistributionSystem < handle
             % calculate the sub-matrix of P of all snapshots and all buses
             for j = 1:obj.numSnap
                 % the id of Vm and Va
-                obj.idVmVa = (obj.numBus-1)*(j-1)+1 : (obj.numBus-1)*(j-1)+obj.numBus-1;
+                obj.idVm = 2*(obj.numBus-1)*(j-1)+1 : 2*(obj.numBus-1)*(j-1)+obj.numBus-1;
+                obj.idVa = 2*(obj.numBus-1)*(j-1)+obj.numBus : 2*(obj.numBus-1)*(j-1)+2*obj.numBus-2;
                 for i = 1:obj.numBus
                     if obj.isMeasure.P(i)
 %                         profile on;
@@ -360,7 +363,8 @@ classdef caseDistributionSystem < handle
             % calculate the sub-matrix of Q of all snapshots and all buses
             for j = 1:obj.numSnap
                 % the id of Vm and Va
-                obj.idVmVa = (obj.numBus-1)*(j-1)+1 : (obj.numBus-1)*(j-1)+obj.numBus-1;
+                obj.idVm = 2*(obj.numBus-1)*(j-1)+1 : 2*(obj.numBus-1)*(j-1)+obj.numBus-1;
+                obj.idVa = 2*(obj.numBus-1)*(j-1)+obj.numBus : 2*(obj.numBus-1)*(j-1)+2*obj.numBus-2;
                 for i = 1:obj.numBus
                     if obj.isMeasure.Q(i)
                         obj = buildFIMQ(obj, i, j, pt);
@@ -372,7 +376,7 @@ classdef caseDistributionSystem < handle
             % calculate the sub-matrix of Vm of all snapshots and all buses
             for j = 1:obj.numSnap
                 % the id of Vm and Va
-                obj.idVmVa = (obj.numBus-1)*(j-1)+1 : (obj.numBus-1)*(j-1)+obj.numBus-1;
+                obj.idVm = 2*(obj.numBus-1)*(j-1)+1 : 2*(obj.numBus-1)*(j-1)+obj.numBus-1;
                 for i = 1:obj.numBus
                     if obj.isMeasure.Vm(i)
                         obj = buildFIMVm(obj, i, j, pt);
@@ -384,7 +388,7 @@ classdef caseDistributionSystem < handle
             % calculate the sub-matrix of Va of all snapshots and all buses
             for j = 1:obj.numSnap
                 % the id of Vm and Va
-                obj.idVmVa = (obj.numBus-1)*(j-1)+1 : (obj.numBus-1)*(j-1)+obj.numBus-1;
+                obj.idVa = 2*(obj.numBus-1)*(j-1)+obj.numBus : 2*(obj.numBus-1)*(j-1)+2*obj.numBus-2;
                 for i = 1:obj.numBus
                     if obj.isMeasure.Va(i)
                         obj = buildFIMVa(obj, i, j, pt);
@@ -468,7 +472,7 @@ classdef caseDistributionSystem < handle
             fOrderVm = obj.data.Vm(:, snap) .* GBThetaP(:, bus) / obj.k.vm;
             fOrderVm(bus) = 0;
             h_Vm(bus) = h_Vm(bus) + sum(fOrderVm);
-            h(obj.numFIM.G+obj.numFIM.B+obj.idVmVa) = h_Vm(2:end);
+            h(obj.numFIM.G+obj.numFIM.B+obj.idVm) = h_Vm(2:end);
 %             H_Vm(:, snap) = h_Vm;
             % remove the source bus whose magnitude is not the state variable
 %             H_Vm(1, :) = []; 
@@ -480,7 +484,7 @@ classdef caseDistributionSystem < handle
             h_Va = obj.data.Vm(bus, snap) * obj.data.Vm(:, snap) .* GBThetaQ(:, bus) / obj.k.va;
             h_Va(bus) = ( - obj.data.Vm(bus, snap)^2 * obj.data.B(bus, bus)...
                        - obj.data.Q(bus, snap)) / obj.k.va;
-            h(obj.numFIM.G+obj.numFIM.B+obj.numFIM.Vm+obj.idVmVa) = h_Va(2:end);
+            h(obj.numFIM.G+obj.numFIM.B+obj.idVa) = h_Va(2:end);
 %             H_Va(:, snap) = h_Va;
             % remove the source bus whose magnitude is not the state variable
 %             H_Va(1, :) = []; 
@@ -538,7 +542,7 @@ classdef caseDistributionSystem < handle
             fOrderVm = obj.data.Vm(:, snap) .* GBThetaQ(:, bus) / obj.k.vm;
             fOrderVm(bus) = 0;
             h_Vm(bus) = h_Vm(bus) + sum(fOrderVm);
-            h(obj.numFIM.G+obj.numFIM.B+obj.idVmVa) = h_Vm(2:end);
+            h(obj.numFIM.G+obj.numFIM.B+obj.idVm) = h_Vm(2:end);
 %             H_Vm(:, snap) = h_Vm;
 %             % remove the source bus whose magnitude is not the state variable
 %             H_Vm(1, :) = []; 
@@ -550,7 +554,7 @@ classdef caseDistributionSystem < handle
             h_Va = - obj.data.Vm(bus, snap) * obj.data.Vm(:, snap) .* GBThetaP(:, bus) / obj.k.va;
             h_Va(bus) = (- obj.data.Vm(bus, snap)^2 * obj.data.G(bus, bus) ...
                         + obj.data.P(bus, snap)) / obj.k.va;
-            h(obj.numFIM.G+obj.numFIM.B+obj.numFIM.Vm+obj.idVmVa) = h_Va(2:end);
+            h(obj.numFIM.G+obj.numFIM.B+obj.idVa) = h_Va(2:end);
 %             H_Va(:, snap) = h_Va;
             % remove the source bus whose magnitude is not the state variable
 %             H_Va(1, :) = []; 
@@ -582,7 +586,7 @@ classdef caseDistributionSystem < handle
 % %             obj.M(:, pt) = h;
 %             [col,row,val] = find(h');
             l = 1;
-            obj.mRow(obj.spt:obj.spt+l-1) = obj.numFIM.G+obj.numFIM.B+obj.idVmVa(bus-1);
+            obj.mRow(obj.spt:obj.spt+l-1) = obj.numFIM.G+obj.numFIM.B+obj.idVm(bus-1);
             obj.mCol(obj.spt:obj.spt+l-1) = pt;
             obj.mVal(obj.spt:obj.spt+l-1) = obj.sigma.Vm(bus).^(-1);
             obj.spt = obj.spt + l;
@@ -602,7 +606,7 @@ classdef caseDistributionSystem < handle
 %             
 %             [col,row,val] = find(h');
             l = 1;
-            obj.mRow(obj.spt:obj.spt+l-1) = obj.numFIM.G+obj.numFIM.B+obj.numFIM.Vm+obj.idVmVa(bus-1);
+            obj.mRow(obj.spt:obj.spt+l-1) = obj.numFIM.G+obj.numFIM.B+obj.idVa(bus-1);
             obj.mCol(obj.spt:obj.spt+l-1) = pt;
             obj.mVal(obj.spt:obj.spt+l-1) = obj.sigma.Va(bus).^(-1);
             obj.spt = obj.spt + l;
@@ -634,77 +638,36 @@ classdef caseDistributionSystem < handle
             % for [A B; B' C], we calculate A-B/C*B'
             if obj.sparseOption
 %                 profile on;
-%                 obj.numFIM.index = obj.numFIM.index(1:obj.numFIM.G+obj.numFIM.B);
-%                 A = obj.FIM(1:obj.numFIM.G+obj.numFIM.B, 1:obj.numFIM.G+obj.numFIM.B);
-%                 B = obj.FIM(1:obj.numFIM.G+obj.numFIM.B, obj.numFIM.G+obj.numFIM.B+1:end);
-%                 C = obj.FIM(obj.numFIM.G+obj.numFIM.B+1:end, obj.numFIM.G+obj.numFIM.B+1:end);
-%                 [row, col, val] = find(obj.FIM);
-%                 idRow = row <= obj.numFIM.G+obj.numFIM.B;
-%                 idCol = col <= obj.numFIM.G+obj.numFIM.B;
-%                 idA = idRow & idCol;
-%                 idB = idRow & ~idCol;
-%                 idC = ~idRow & ~idCol;
-%                 A1 = sparse(row(idA), col(idA), val(idA), obj.numFIM.G+obj.numFIM.B, obj.numFIM.G+obj.numFIM.B);
-%                 B1 = sparse(row(idB), col(idB)-(obj.numFIM.G+obj.numFIM.B), val(idB), obj.numFIM.G+obj.numFIM.B, obj.numFIM.Vm+obj.numFIM.Va);
-%                 C1 = sparse(row(idC)-(obj.numFIM.G+obj.numFIM.B), col(idC)-(obj.numFIM.G+obj.numFIM.B), val(idC), obj.numFIM.Vm+obj.numFIM.Va, obj.numFIM.Vm+obj.numFIM.Va);
                 
-                idCell = mat2cell((obj.numBus-1)*ones(2,2*obj.numSnap), [1 1], [obj.numSnap obj.numSnap]);
+                idCell = 2*(obj.numBus-1) * ones(1, obj.numSnap);
                 Cell = mat2cell(obj.FIM(obj.numFIM.index, obj.numFIM.index), ...
                     [obj.numFIM.G+obj.numFIM.B-2*obj.numFIM.del obj.numFIM.Vm+obj.numFIM.Va], ...
                     [obj.numFIM.G+obj.numFIM.B-2*obj.numFIM.del obj.numFIM.Vm+obj.numFIM.Va]);
 %                 Cell{1,1} = full(Cell{1,1});
 %                 Cell{1,2} = full(Cell{1,2});
                 Cell{1,2} = mat2cell(Cell{1,2},...
-                    obj.numFIM.G+obj.numFIM.B-2*obj.numFIM.del, [obj.numFIM.Vm obj.numFIM.Va]);
-                Cell{1,2} = cellfun(@mat2cell, Cell{1,2}, ...
-                    {obj.numFIM.G+obj.numFIM.B-2*obj.numFIM.del obj.numFIM.G+obj.numFIM.B-2*obj.numFIM.del},...
-                    idCell(1,:),  'UniformOutput',false); % get the sub matrces
+                    obj.numFIM.G+obj.numFIM.B-2*obj.numFIM.del, idCell);
                 Cell{2,2} = mat2cell(Cell{2,2}, ...
-                    [obj.numFIM.Vm obj.numFIM.Va], [obj.numFIM.Vm obj.numFIM.Va]);
-                Cell{2,2} = cellfun(@mat2cell, Cell{2,2}, idCell, idCell, 'UniformOutput',false); % get the sub matrces
+                    idCell, idCell);
                 
                 % get the inversion of Cell{2,2}, we separate it into a
                 % single function
-                Cell{2,2} = cellfun(@obj.cell2diag, Cell{2,2},'UniformOutput',false); % extract the diagonal elements
-                invC22 = cell(2,2);
+                Cell{2,2} = obj.cell2diag(Cell{2,2});
                 % [D E; E' F]
                 disp('calculating invC22');
-                invC22F = cellfun(@inv, Cell{2,2}{2,2},'UniformOutput',false);
-                invC22{1,1} = cellfun(@(a,b,c,d) d-a*b*c, Cell{2,2}{1,2}, invC22F, Cell{2,2}{2,1},Cell{2,2}{1,1},'UniformOutput',false);
-                invC22{1,1} = cellfun(@inv, invC22{1,1}, 'UniformOutput',false);
-                invC22{1,2} = cellfun(@(a,b,c) -a*b*c, invC22{1,1}, Cell{2,2}{1,2}, invC22F, 'UniformOutput',false);
-                invC22{2,1} = cellfun(@(a) a', invC22{1,2}, 'UniformOutput',false);
-                invC22{2,2} = cellfun(@(a,b,c,d) a+a*b*c*d*a, invC22F, Cell{2,2}{2,1}, invC22{1,1}, Cell{2,2}{1,2}, 'UniformOutput',false);
+                invC22 = cellfun(@inv, Cell{2,2},'UniformOutput',false);
                 
                 % calculate the inv(A-B/CB')
                 disp('calculating (A-B/CB)^-1');
-                BCB = obj.cellMulSum(Cell{1,2}{1}, invC22{1,1}, Cell{1,2}{1});
-                BCB = BCB + obj.cellMulSum(Cell{1,2}{2}, invC22{2,1}, Cell{1,2}{1});
-                BCB = BCB + obj.cellMulSum(Cell{1,2}{1}, invC22{1,2}, Cell{1,2}{2});
-                BCB = BCB + obj.cellMulSum(Cell{1,2}{2}, invC22{2,2}, Cell{1,2}{2});
-%                 BCB = cell(1,4); % B/CB'
-%                 BCB{1} = cellfun(@(a,b,c) full(a)*b*full(c'), Cell{1,2}{1}, invC22{1,1}, Cell{1,2}{1}, 'UniformOutput',false);
-%                 BCB{2} = cellfun(@(a,b,c) full(a)*b*full(c'), Cell{1,2}{2}, invC22{2,1}, Cell{1,2}{1}, 'UniformOutput',false);
-%                 BCB{3} = cellfun(@(a,b,c) full(a)*b*full(c'), Cell{1,2}{1}, invC22{1,2}, Cell{1,2}{2}, 'UniformOutput',false);
-%                 BCB{4} = cellfun(@(a,b,c) full(a)*b*full(c'), Cell{1,2}{2}, invC22{2,2}, Cell{1,2}{2}, 'UniformOutput',false);
-%                 BCB = cellfun(@obj.cellSum, BCB, 'UniformOutput',false);
-%                 BCB = obj.cellSum(BCB);
+                BCB = obj.cellMulSum(Cell{1,2}, invC22, Cell{1,2});
+
                 ABC = inv(Cell{1,1} - BCB); % inv(A-B/CB')
                 diagABC = diag(ABC);
                 % Calculate the diag of C
                 diagC = obj.cellGetDiag(invC22);
                 % Calculate the var
                 var = [diagABC; diagC];
-%                 % recover the full matrix
-%                 invC22Full = mat2cell(sparse(obj.numFIM.Vm+obj.numFIM.Va,obj.numFIM.Vm+obj.numFIM.Va), ...
-%                     [obj.numFIM.Vm obj.numFIM.Va], ...
-%                     [obj.numFIM.Vm obj.numFIM.Va]);
-%                 invC22Full = cellfun(@mat2cell, invC22Full, idCell, idCell ,'UniformOutput',false); % get the sub matrces
-%                 invC22Full = cellfun(@obj.diag2cell, invC22Full, invC22, 'UniformOutput',false); % recover the full matrix
-%                 invC22Full = cellfun(@cell2mat, invC22Full);
-%                 test = inv(full(obj.FIM));  
-%                 obj.FIM = A - B/C*B';
-%                 var = inv(obj.FIM);   
+
 %                 profile off;
 %                 profile viewer;
             else
@@ -763,16 +726,10 @@ classdef caseDistributionSystem < handle
             obj.bound.G_relative_col = reshape(obj.bound.G_relative, [], 1);
             obj.bound.B_relative_col = reshape(obj.bound.B_relative, [], 1);
             
-            obj.bound.Vm = ...
-                obj.bound.total(obj.numFIM.G+obj.numFIM.B+1-2*obj.numFIM.del...
-                :obj.numFIM.G+obj.numFIM.B+obj.numFIM.Vm-2*obj.numFIM.del) / obj.k.vm;
-            obj.bound.VmBus = mean(reshape(obj.bound.Vm, obj.numBus-1, obj.numSnap), 2);
-            obj.bound.total(obj.numFIM.G+obj.numFIM.B+1-2*obj.numFIM.del...
-                :obj.numFIM.G+obj.numFIM.B+obj.numFIM.Vm-2*obj.numFIM.del)...
-                = obj.bound.Vm;
-            obj.bound.Va = ...
-                obj.bound.total(obj.numFIM.G+obj.numFIM.B+obj.numFIM.Vm+1-2*obj.numFIM.del...
-                :obj.numFIM.Sum-2*obj.numFIM.del) / obj.k.va;
+            obj.bound.VmVa = reshape(obj.bound.total(obj.numFIM.G+obj.numFIM.B+1-2*obj.numFIM.del:end), 2*(obj.numBus-1), obj.numSnap);
+            obj.bound.Vm = reshape(obj.bound.VmVa(1:obj.numBus-1, :), [], 1) / obj.k.vm;
+            obj.bound.VmBus = mean(obj.bound.VmVa(1:obj.numBus-1, :), 2);
+            obj.bound.Va = reshape(obj.bound.VmVa(obj.numBus:end, :), [], 1) / obj.k.vm;
             obj.bound.VaBus = mean(reshape(obj.bound.Va, obj.numBus-1, obj.numSnap), 2);
             obj.bound.total(obj.numFIM.G+obj.numFIM.B+obj.numFIM.Vm+1-2*obj.numFIM.del...
                 :obj.numFIM.Sum-2*obj.numFIM.del)...
@@ -820,8 +777,9 @@ classdef caseDistributionSystem < handle
                 diagEle = sum(abs(obj.data.G)) / 2;
                 ratio1 = abs(bsxfun(@rdivide, obj.bound.G, diagEle));
                 ratio2 = abs(bsxfun(@rdivide, obj.bound.G, diagEle'));
-                ratio = max(ratio1, ratio2);
-                topoPriorNext = ratio > obj.topoTol;
+                ratio = min(ratio1, ratio2);
+                topoPriorNext = ratio < obj.topoTol;
+                topoPriorNext = obj.data.GBzero & topoPriorNext;
 %                 topoPriorNext = obj.data.GBzero & (obj.bound.G_relative < obj.topoTol);
                 numDisconnect = sum(sum(triu(topoPriorNext) - triu(obj.topoPrior)));
                 fprintf('We disconnect %d branches\n', numDisconnect);
@@ -973,14 +931,11 @@ classdef caseDistributionSystem < handle
         
         function diagEle = cellGetDiag(Cin)
             % This method get the diagonal elements from the Cin
-            Snap = length(Cin{1,1});
-            Bus = size(Cin{1,1}{1}, 1);
-            diagEle = zeros(Bus * Snap * 2, 1);
+            Snap = length(Cin);
+            Bus = size(Cin{1,1}, 1);
+            diagEle = zeros(Bus * Snap, 1);
             for i = 1:Snap
-                C1 = diag(full(Cin{1,1}{i}));
-                C2 = diag(full(Cin{2,2}{i}));
-                diagEle((i-1)*Bus+1:i*Bus) = C1;
-                diagEle((i-1)*Bus+1+Bus*Snap:i*Bus+Bus*Snap) = C2;
+                diagEle((i-1)*Bus+1:i*Bus) = diag(full(Cin{i}));
             end
         end
     end

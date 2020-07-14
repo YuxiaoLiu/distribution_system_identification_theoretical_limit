@@ -217,7 +217,8 @@ classdef caseDistributionSystemMeasure < caseDistributionSystem
             % calculate the sub-matrix of P of all snapshots and all buses
             for j = 1:obj.numSnap
                 % the id of Vm and Va
-                obj.idVmVa = (obj.numBus-1)*(j-1)+1 : (obj.numBus-1)*(j-1)+obj.numBus-1;
+                obj.idVm = 2*(obj.numBus-1)*(j-1)+1 : 2*(obj.numBus-1)*(j-1)+obj.numBus-1;
+                obj.idVa = 2*(obj.numBus-1)*(j-1)+obj.numBus : 2*(obj.numBus-1)*(j-1)+2*obj.numBus-2;
                 for i = 1:obj.numBus
                     if obj.isMeasure.P(i)
 %                         profile on
@@ -232,7 +233,8 @@ classdef caseDistributionSystemMeasure < caseDistributionSystem
             % calculate the sub-matrix of Q of all snapshots and all buses
             for j = 1:obj.numSnap
                 % the id of Vm and Va
-                obj.idVmVa = (obj.numBus-1)*(j-1)+1 : (obj.numBus-1)*(j-1)+obj.numBus-1;
+                obj.idVm = 2*(obj.numBus-1)*(j-1)+1 : 2*(obj.numBus-1)*(j-1)+obj.numBus-1;
+                obj.idVa = 2*(obj.numBus-1)*(j-1)+obj.numBus : 2*(obj.numBus-1)*(j-1)+2*obj.numBus-2;
                 for i = 1:obj.numBus
                     if obj.isMeasure.Q(i)
                         obj = approximateFIMQ(obj, i, j, pt);
@@ -244,7 +246,7 @@ classdef caseDistributionSystemMeasure < caseDistributionSystem
             % calculate the sub-matrix of Vm of all snapshots and all buses
             for j = 1:obj.numSnap
                 % the id of Vm and Va
-                obj.idVmVa = (obj.numBus-1)*(j-1)+1 : (obj.numBus-1)*(j-1)+obj.numBus-1;
+                obj.idVm = 2*(obj.numBus-1)*(j-1)+1 : 2*(obj.numBus-1)*(j-1)+obj.numBus-1;
                 for i = 1:obj.numBus
                     if obj.isMeasure.Vm(i)
                         obj = buildFIMVm(obj, i, j, pt);
@@ -256,7 +258,7 @@ classdef caseDistributionSystemMeasure < caseDistributionSystem
             % calculate the sub-matrix of Va of all snapshots and all buses
             for j = 1:obj.numSnap
                 % the id of Vm and Va
-                obj.idVmVa = (obj.numBus-1)*(j-1)+1 : (obj.numBus-1)*(j-1)+obj.numBus-1;
+                obj.idVa = 2*(obj.numBus-1)*(j-1)+obj.numBus : 2*(obj.numBus-1)*(j-1)+2*obj.numBus-2;
                 for i = 1:obj.numBus
                     if obj.isMeasure.Va(i)
                         obj = buildFIMVa(obj, i, j, pt);
@@ -311,7 +313,7 @@ classdef caseDistributionSystemMeasure < caseDistributionSystem
             fOrderVm = obj.dataE.Vm(:, snap) .* obj.dataE.G(:, bus) / obj.k.vm; % obj.dataE.G(:, bus)
             fOrderVm(bus) = 0;
             h_Vm(bus) = h_Vm(bus) + sum(fOrderVm);
-            h(obj.numFIM.G+obj.numFIM.B+obj.idVmVa) = h_Vm(2:end);
+            h(obj.numFIM.G+obj.numFIM.B+obj.idVm) = h_Vm(2:end);
 %             H_Vm(:, snap) = h_Vm;
             % remove the source bus whose magnitude is not the state variable
 %             H_Vm(1, :) = []; 
@@ -323,7 +325,7 @@ classdef caseDistributionSystemMeasure < caseDistributionSystem
             h_Va = obj.dataE.Vm(bus, snap) * obj.dataE.Vm(:, snap) .* (- obj.dataE.B(:, bus)) / obj.k.va; % (- obj.dataE.B(:, bus))
             h_Va(bus) = ( - obj.dataE.Vm(bus, snap)^2 * obj.dataE.B(bus, bus)...
                        - obj.data.Q_noised(bus, snap)) / obj.k.va;
-            h(obj.numFIM.G+obj.numFIM.B+obj.numFIM.Vm+obj.idVmVa) = h_Va(2:end);
+            h(obj.numFIM.G+obj.numFIM.B+obj.idVa) = h_Va(2:end);
 %             H_Va(:, snap) = h_Va;
             % remove the source bus whose magnitude is not the state variable
 %             H_Va(1, :) = []; 
@@ -381,7 +383,7 @@ classdef caseDistributionSystemMeasure < caseDistributionSystem
             fOrderVm = obj.dataE.Vm(:, snap) .* (-obj.dataE.B(:, bus)) / obj.k.vm; % (-obj.dataE.B(:, bus))
             fOrderVm(bus) = 0;
             h_Vm(bus) = h_Vm(bus) + sum(fOrderVm);
-            h(obj.numFIM.G+obj.numFIM.B+obj.idVmVa) = h_Vm(2:end);
+            h(obj.numFIM.G+obj.numFIM.B+obj.idVm) = h_Vm(2:end);
 %             H_Vm(:, snap) = h_Vm;
 %             % remove the source bus whose magnitude is not the state variable
 %             H_Vm(1, :) = []; 
@@ -393,7 +395,7 @@ classdef caseDistributionSystemMeasure < caseDistributionSystem
             h_Va = - obj.dataE.Vm(bus, snap) * obj.dataE.Vm(:, snap) .* obj.dataE.G(:, bus) / obj.k.va; % obj.dataE.G(:, bus)
             h_Va(bus) = (- obj.dataE.Vm(bus, snap)^2 * obj.dataE.G(bus, bus) ...
                         + obj.data.P_noised(bus, snap)) / obj.k.va;
-            h(obj.numFIM.G+obj.numFIM.B+obj.numFIM.Vm+obj.idVmVa) = h_Va(2:end);
+            h(obj.numFIM.G+obj.numFIM.B+obj.idVa) = h_Va(2:end);
 %             H_Va(:, snap) = h_Va;
 %             % remove the source bus whose magnitude is not the state variable
 %             H_Va(1, :) = []; 
@@ -435,45 +437,25 @@ classdef caseDistributionSystemMeasure < caseDistributionSystem
             
             % for [A B; B' C], we calculate A-B/C*B'
             if obj.sparseOption
-%                 obj.numFIM.index = obj.numFIM.index(1:obj.numFIM.G+obj.numFIM.B);
-%                 A = obj.A_FIM(1:obj.numFIM.G+obj.numFIM.B, 1:obj.numFIM.G+obj.numFIM.B);
-%                 B = obj.A_FIM(1:obj.numFIM.G+obj.numFIM.B, obj.numFIM.G+obj.numFIM.B+1:end);
-%                 C = obj.A_FIM(obj.numFIM.G+obj.numFIM.B+1:end, obj.numFIM.G+obj.numFIM.B+1:end);
-%                 AFIM = A - B/C*B';
-%                 cov = inv(full(obj.A_FIM(obj.numFIM.index, obj.numFIM.index)));
-%                 varTrue = diag(cov);
-                idCell = mat2cell((obj.numBus-1)*ones(2,2*obj.numSnap), [1 1], [obj.numSnap obj.numSnap]);
+                idCell = 2*(obj.numBus-1) * ones(1, obj.numSnap);
                 Cell = mat2cell(obj.A_FIM(obj.numFIM.index, obj.numFIM.index), ...
                     [obj.numFIM.G+obj.numFIM.B-2*obj.numFIM.del obj.numFIM.Vm+obj.numFIM.Va], ...
                     [obj.numFIM.G+obj.numFIM.B-2*obj.numFIM.del obj.numFIM.Vm+obj.numFIM.Va]);
                 Cell{1,2} = mat2cell(Cell{1,2},...
-                    obj.numFIM.G+obj.numFIM.B-2*obj.numFIM.del, [obj.numFIM.Vm obj.numFIM.Va]);
-                Cell{1,2} = cellfun(@mat2cell, Cell{1,2}, ...
-                    {obj.numFIM.G+obj.numFIM.B-2*obj.numFIM.del obj.numFIM.G+obj.numFIM.B-2*obj.numFIM.del},...
-                    idCell(1,:),  'UniformOutput',false); % get the sub matrces
+                    obj.numFIM.G+obj.numFIM.B-2*obj.numFIM.del, idCell);
                 Cell{2,2} = mat2cell(Cell{2,2}, ...
-                    [obj.numFIM.Vm obj.numFIM.Va], [obj.numFIM.Vm obj.numFIM.Va]);
-                Cell{2,2} = cellfun(@mat2cell, Cell{2,2}, idCell, idCell, 'UniformOutput',false); % get the sub matrces
+                    idCell, idCell);
                 
                 % get the inversion of Cell{2,2}, we separate it into a
                 % single function
-                Cell{2,2} = cellfun(@obj.cell2diag, Cell{2,2},'UniformOutput',false); % extract the diagonal elements
-                invC22 = cell(2,2);
+                Cell{2,2} = obj.cell2diag(Cell{2,2});
                 % [D E; E' F]
                 disp('calculating invC22');
-                invC22F = cellfun(@inv, Cell{2,2}{2,2},'UniformOutput',false);
-                invC22{1,1} = cellfun(@(a,b,c,d) d-a*b*c, Cell{2,2}{1,2}, invC22F, Cell{2,2}{2,1},Cell{2,2}{1,1},'UniformOutput',false);
-                invC22{1,1} = cellfun(@inv, invC22{1,1}, 'UniformOutput',false);
-                invC22{1,2} = cellfun(@(a,b,c) -a*b*c, invC22{1,1}, Cell{2,2}{1,2}, invC22F, 'UniformOutput',false);
-                invC22{2,1} = cellfun(@(a) a', invC22{1,2}, 'UniformOutput',false);
-                invC22{2,2} = cellfun(@(a,b,c,d) a+a*b*c*d*a, invC22F, Cell{2,2}{2,1}, invC22{1,1}, Cell{2,2}{1,2}, 'UniformOutput',false);
+                invC22 = cellfun(@inv, Cell{2,2},'UniformOutput',false);
                 
                 % calculate the inv(A-B/CB')
                 disp('calculating (A-B/CB)^-1');
-                BCB = obj.cellMulSum(Cell{1,2}{1}, invC22{1,1}, Cell{1,2}{1});
-                BCB = BCB + obj.cellMulSum(Cell{1,2}{2}, invC22{2,1}, Cell{1,2}{1});
-                BCB = BCB + obj.cellMulSum(Cell{1,2}{1}, invC22{1,2}, Cell{1,2}{2});
-                BCB = BCB + obj.cellMulSum(Cell{1,2}{2}, invC22{2,2}, Cell{1,2}{2});
+                BCB = obj.cellMulSum(Cell{1,2}, invC22, Cell{1,2});
                 
                 ABC = inv(Cell{1,1} - BCB); % inv(A-B/CB')
                 diagABC = diag(ABC);
@@ -518,20 +500,26 @@ classdef caseDistributionSystemMeasure < caseDistributionSystem
             obj.boundA.G_relative_col = reshape(obj.boundA.G_relative, [], 1);
             obj.boundA.B_relative_col = reshape(obj.boundA.B_relative, [], 1);
             
-            obj.boundA.Vm = ...
-                obj.boundA.total(obj.numFIM.G+obj.numFIM.B+1-2*obj.numFIM.del...
-                :obj.numFIM.G+obj.numFIM.B+obj.numFIM.Vm-2*obj.numFIM.del) / obj.k.vm;
-            obj.boundA.VmBus = mean(reshape(obj.boundA.Vm, obj.numBus-1, obj.numSnap), 2);
-            obj.boundA.total(obj.numFIM.G+obj.numFIM.B+1-2*obj.numFIM.del...
-                :obj.numFIM.G+obj.numFIM.B+obj.numFIM.Vm-2*obj.numFIM.del)...
-                = obj.boundA.Vm;
-            obj.boundA.Va = ...
-                obj.boundA.total(obj.numFIM.G+obj.numFIM.B+obj.numFIM.Vm+1-2*obj.numFIM.del...
-                :obj.numFIM.Sum-2*obj.numFIM.del) / obj.k.va;
-            obj.boundA.VaBus = mean(reshape(obj.boundA.Va, obj.numBus-1, obj.numSnap), 2);
-            obj.boundA.total(obj.numFIM.G+obj.numFIM.B+obj.numFIM.Vm+1-2*obj.numFIM.del...
-                :obj.numFIM.Sum-2*obj.numFIM.del)...
-                = obj.boundA.Va;
+            obj.boundA.VmVa = reshape(obj.boundA.total(obj.numFIM.G+obj.numFIM.B+1-2*obj.numFIM.del:end), 2*(obj.numBus-1), obj.numSnap);
+            obj.boundA.Vm = reshape(obj.boundA.VmVa(1:obj.numBus-1, :), [], 1) / obj.k.vm;
+            obj.boundA.VmBus = mean(obj.boundA.VmVa(1:obj.numBus-1, :), 2);
+            obj.boundA.Va = reshape(obj.boundA.VmVa(obj.numBus:end, :), [], 1) / obj.k.vm;
+            obj.boundA.VaBus = mean(obj.boundA.VmVa(obj.numBus:end, :), 2);
+            
+%             obj.boundA.Vm = ...
+%                 obj.boundA.total(obj.numFIM.G+obj.numFIM.B+1-2*obj.numFIM.del...
+%                 :obj.numFIM.G+obj.numFIM.B+obj.numFIM.Vm-2*obj.numFIM.del) / obj.k.vm;
+%             obj.boundA.VmBus = mean(reshape(obj.boundA.Vm, obj.numBus-1, obj.numSnap), 2);
+%             obj.boundA.total(obj.numFIM.G+obj.numFIM.B+1-2*obj.numFIM.del...
+%                 :obj.numFIM.G+obj.numFIM.B+obj.numFIM.Vm-2*obj.numFIM.del)...
+%                 = obj.boundA.Vm;
+%             obj.boundA.Va = ...
+%                 obj.boundA.total(obj.numFIM.G+obj.numFIM.B+obj.numFIM.Vm+1-2*obj.numFIM.del...
+%                 :obj.numFIM.Sum-2*obj.numFIM.del) / obj.k.va;
+%             obj.boundA.VaBus = mean(reshape(obj.boundA.Va, obj.numBus-1, obj.numSnap), 2);
+%             obj.boundA.total(obj.numFIM.G+obj.numFIM.B+obj.numFIM.Vm+1-2*obj.numFIM.del...
+%                 :obj.numFIM.Sum-2*obj.numFIM.del)...
+%                 = obj.boundA.Va;
         end
         
         function obj = identifyTopo(obj)
@@ -1047,24 +1035,29 @@ classdef caseDistributionSystemMeasure < caseDistributionSystem
             % The weight of the initial gradient
             wg.P.G = mean(abs(obj.gradP(1:obj.numGrad.G)));
             wg.P.B = mean(abs(obj.gradP(1+obj.numGrad.G:obj.numGrad.G+obj.numGrad.B)));
-            wg.P.Vm = mean(abs(obj.gradP(1+obj.numGrad.G+obj.numGrad.B:obj.numGrad.G+obj.numGrad.B+obj.numGrad.Vm)));
-            wg.P.Va = mean(abs(obj.gradP(1+obj.numGrad.G+obj.numGrad.B+obj.numGrad.Vm:end)));
+            gradPVmVa = reshape(obj.gradP(1+obj.numGrad.G+obj.numGrad.B:end), (obj.numBus-1)*2, obj.numSnap);
+            wg.P.Vm = mean(mean(abs(gradPVmVa(1:obj.numBus-1, :))));
+            wg.P.Va = mean(mean(abs(gradPVmVa(obj.numBus:end, :))));
+            
             wg.Q.G = mean(abs(obj.gradQ(1:obj.numGrad.G)));
             wg.Q.B = mean(abs(obj.gradQ(1+obj.numGrad.G:obj.numGrad.G+obj.numGrad.B)));
-            wg.Q.Vm = mean(abs(obj.gradQ(1+obj.numGrad.G+obj.numGrad.B:obj.numGrad.G+obj.numGrad.B+obj.numGrad.Vm)));
-            wg.Q.Va = mean(abs(obj.gradQ(1+obj.numGrad.G+obj.numGrad.B+obj.numGrad.Vm:end)));
+            gradQVmVa = reshape(obj.gradQ(1+obj.numGrad.G+obj.numGrad.B:end), (obj.numBus-1)*2, obj.numSnap);
+            wg.Q.Vm = mean(mean(abs(gradQVmVa(1:obj.numBus-1, :))));
+            wg.Q.Va = mean(mean(abs(gradQVmVa(obj.numBus:end, :))));
             
             wg.PQ_GB = mean([wg.P.G wg.P.B wg.Q.G  wg.Q.B]);
             wg.PQ_Vm = mean([wg.P.Vm wg.Q.Vm]);
             wg.PQ_Va = mean([wg.P.Va wg.Q.Va]);
-            wg.Vm_Vm = mean(abs(obj.gradVm(1+obj.numGrad.G+obj.numGrad.B:obj.numGrad.G+obj.numGrad.B+obj.numGrad.Vm)));
-            wg.Va_Va = mean(abs(obj.gradVa(1+obj.numGrad.G+obj.numGrad.B+obj.numGrad.Vm:end)));
+            gradVmVm = reshape(obj.gradVm(1+obj.numGrad.G+obj.numGrad.B:end), (obj.numBus-1)*2, obj.numSnap);
+            gradVaVa = reshape(obj.gradVa(1+obj.numGrad.G+obj.numGrad.B:end), (obj.numBus-1)*2, obj.numSnap);
+            wg.Vm_Vm = mean(mean(abs(gradVmVm(1:obj.numBus-1, :))));
+            wg.Va_Va = mean(mean(abs(gradVaVa(obj.numBus:end, :))));
             
             % The weight of the CRLB
             if ~obj.tuneGrad
                 wb.GB = mean(abs(obj.boundA.total(1:obj.numFIM.G+obj.numFIM.B-2*obj.numFIM.del)));
-                wb.Vm = mean(abs(obj.boundA.total(1+obj.numFIM.G+obj.numFIM.B-2*obj.numFIM.del:obj.numFIM.G+obj.numFIM.B+obj.numFIM.Vm-2*obj.numFIM.del)));
-                wb.Va = mean(abs(obj.boundA.total(1+obj.numFIM.G+obj.numFIM.B+obj.numFIM.Vm-2*obj.numFIM.del:end)));
+                wb.Vm = mean(abs(obj.boundA.Vm));
+                wb.Va = mean(abs(obj.boundA.Va));
             else
                 wb.GB = mean(abs(obj.boundTuned(1:obj.numGrad.G+obj.numGrad.B)));
                 wb.Vm = mean(abs(obj.boundTuned(1+obj.numGrad.G+obj.numGrad.B:obj.numGrad.G+obj.numGrad.B+obj.numGrad.Vm)));
@@ -1083,46 +1076,57 @@ classdef caseDistributionSystemMeasure < caseDistributionSystem
             
             % tune the gradient vector. 
             % normalize the gradient weight by P Q Vm Va
+            gradPVmVa(1:obj.numBus-1,:) = gradPVmVa(1:obj.numBus-1,:) / (wg.PQ_Vm + 1e-9);
+            gradPVmVa(obj.numBus:end,:) = gradPVmVa(obj.numBus:end,:) / (wg.PQ_Va + 1e-9);
+%             obj.gradP(1+obj.numGrad.G+obj.numGrad.B:end) = reshape(gradPVmVa, [], 1);
             obj.gradP(1:obj.numGrad.G+obj.numGrad.B) = ...
                 obj.gradP(1:obj.numGrad.G+obj.numGrad.B) / (wg.PQ_GB + 1e-9);
-            obj.gradP(1+obj.numGrad.G+obj.numGrad.B:obj.numGrad.G+obj.numGrad.B+obj.numGrad.Vm) = ...
-                obj.gradP(1+obj.numGrad.G+obj.numGrad.B:obj.numGrad.G+obj.numGrad.B+obj.numGrad.Vm) / (wg.PQ_Vm + 1e-9);
-            obj.gradP(1+obj.numGrad.G+obj.numGrad.B+obj.numGrad.Vm:end) = ...
-                obj.gradP(1+obj.numGrad.G+obj.numGrad.B+obj.numGrad.Vm:end) / (wg.PQ_Va + 1e-9);
+%             obj.gradP(1+obj.numGrad.G+obj.numGrad.B:obj.numGrad.G+obj.numGrad.B+obj.numGrad.Vm) = ...
+%                 obj.gradP(1+obj.numGrad.G+obj.numGrad.B:obj.numGrad.G+obj.numGrad.B+obj.numGrad.Vm) / (wg.PQ_Vm + 1e-9);
+%             obj.gradP(1+obj.numGrad.G+obj.numGrad.B+obj.numGrad.Vm:end) = ...
+%                 obj.gradP(1+obj.numGrad.G+obj.numGrad.B+obj.numGrad.Vm:end) / (wg.PQ_Va + 1e-9);
             
+            gradQVmVa(1:obj.numBus-1,:) = gradQVmVa(1:obj.numBus-1,:) / (wg.PQ_Vm + 1e-9);
+            gradQVmVa(obj.numBus:end,:) = gradQVmVa(obj.numBus:end,:) / (wg.PQ_Va + 1e-9);
+%             obj.gradQ(1+obj.numGrad.G+obj.numGrad.B:end) = reshape(gradQVmVa, [], 1);
             obj.gradQ(1:obj.numGrad.G+obj.numGrad.B) = ...
                 obj.gradQ(1:obj.numGrad.G+obj.numGrad.B) / (wg.PQ_GB + 1e-9);
-            obj.gradQ(1+obj.numGrad.G+obj.numGrad.B:obj.numGrad.G+obj.numGrad.B+obj.numGrad.Vm) = ...
-                obj.gradQ(1+obj.numGrad.G+obj.numGrad.B:obj.numGrad.G+obj.numGrad.B+obj.numGrad.Vm) / (wg.PQ_Vm + 1e-9);
-            obj.gradQ(1+obj.numGrad.G+obj.numGrad.B+obj.numGrad.Vm:end) = ...
-                obj.gradQ(1+obj.numGrad.G+obj.numGrad.B+obj.numGrad.Vm:end) / (wg.PQ_Va + 1e-9);
+%             obj.gradQ(1+obj.numGrad.G+obj.numGrad.B:obj.numGrad.G+obj.numGrad.B+obj.numGrad.Vm) = ...
+%                 obj.gradQ(1+obj.numGrad.G+obj.numGrad.B:obj.numGrad.G+obj.numGrad.B+obj.numGrad.Vm) / (wg.PQ_Vm + 1e-9);
+%             obj.gradQ(1+obj.numGrad.G+obj.numGrad.B+obj.numGrad.Vm:end) = ...
+%                 obj.gradQ(1+obj.numGrad.G+obj.numGrad.B+obj.numGrad.Vm:end) / (wg.PQ_Va + 1e-9);
             
-            obj.gradVm(1+obj.numGrad.G+obj.numGrad.B:obj.numGrad.G+obj.numGrad.B+obj.numGrad.Vm) = ...
-                obj.gradVm(1+obj.numGrad.G+obj.numGrad.B:obj.numGrad.G+obj.numGrad.B+obj.numGrad.Vm) / (wg.Vm_Vm + 1e-9);
-            obj.gradVa(1+obj.numGrad.G+obj.numGrad.B+obj.numGrad.Vm:end) = ...
-                obj.gradVa(1+obj.numGrad.G+obj.numGrad.B+obj.numGrad.Vm:end) / (wg.Va_Va + 1e-9);
+            obj.gradVm = ...
+                obj.gradVm / (wg.Vm_Vm + 1e-9);
+            obj.gradVa = ...
+                obj.gradVa / (wg.Va_Va + 1e-9);
             
             % we use the weight of the approximated CRLB and the weight
             % from the loss function
-            
+            gradPVmVa(1:obj.numBus-1,:) = gradPVmVa(1:obj.numBus-1,:) * wb.Vm * wl.Vm_PQ;
+            gradPVmVa(obj.numBus:end,:) = gradPVmVa(obj.numBus:end,:) * wb.Va * wl.Va_PQ;
+            obj.gradP(1+obj.numGrad.G+obj.numGrad.B:end) = reshape(gradPVmVa, [], 1);
             obj.gradP(1:obj.numGrad.G+obj.numGrad.B) = ...
                 obj.gradP(1:obj.numGrad.G+obj.numGrad.B) * wb.GB;
-            obj.gradP(1+obj.numGrad.G+obj.numGrad.B:obj.numGrad.G+obj.numGrad.B+obj.numGrad.Vm) = ...
-                obj.gradP(1+obj.numGrad.G+obj.numGrad.B:obj.numGrad.G+obj.numGrad.B+obj.numGrad.Vm) * wb.Vm * wl.Vm_PQ;
-            obj.gradP(1+obj.numGrad.G+obj.numGrad.B+obj.numGrad.Vm:end) = ...
-                obj.gradP(1+obj.numGrad.G+obj.numGrad.B+obj.numGrad.Vm:end) * wb.Va * wl.Va_PQ;
+%             obj.gradP(1+obj.numGrad.G+obj.numGrad.B:obj.numGrad.G+obj.numGrad.B+obj.numGrad.Vm) = ...
+%                 obj.gradP(1+obj.numGrad.G+obj.numGrad.B:obj.numGrad.G+obj.numGrad.B+obj.numGrad.Vm) * wb.Vm * wl.Vm_PQ;
+%             obj.gradP(1+obj.numGrad.G+obj.numGrad.B+obj.numGrad.Vm:end) = ...
+%                 obj.gradP(1+obj.numGrad.G+obj.numGrad.B+obj.numGrad.Vm:end) * wb.Va * wl.Va_PQ;
             
+            gradQVmVa(1:obj.numBus-1,:) = gradQVmVa(1:obj.numBus-1,:) * wb.Vm * wl.Vm_PQ;
+            gradQVmVa(obj.numBus:end,:) = gradQVmVa(obj.numBus:end,:) * wb.Va * wl.Va_PQ;
+            obj.gradQ(1+obj.numGrad.G+obj.numGrad.B:end) = reshape(gradQVmVa, [], 1);
             obj.gradQ(1:obj.numGrad.G+obj.numGrad.B) = ...
                 obj.gradQ(1:obj.numGrad.G+obj.numGrad.B) * wb.GB;
-            obj.gradQ(1+obj.numGrad.G+obj.numGrad.B:obj.numGrad.G+obj.numGrad.B+obj.numGrad.Vm) = ...
-                obj.gradQ(1+obj.numGrad.G+obj.numGrad.B:obj.numGrad.G+obj.numGrad.B+obj.numGrad.Vm) * wb.Vm * wl.Vm_PQ;
-            obj.gradQ(1+obj.numGrad.G+obj.numGrad.B+obj.numGrad.Vm:end) = ...
-                obj.gradQ(1+obj.numGrad.G+obj.numGrad.B+obj.numGrad.Vm:end) * wb.Va * wl.Va_PQ;
+%             obj.gradQ(1+obj.numGrad.G+obj.numGrad.B:obj.numGrad.G+obj.numGrad.B+obj.numGrad.Vm) = ...
+%                 obj.gradQ(1+obj.numGrad.G+obj.numGrad.B:obj.numGrad.G+obj.numGrad.B+obj.numGrad.Vm) * wb.Vm * wl.Vm_PQ;
+%             obj.gradQ(1+obj.numGrad.G+obj.numGrad.B+obj.numGrad.Vm:end) = ...
+%                 obj.gradQ(1+obj.numGrad.G+obj.numGrad.B+obj.numGrad.Vm:end) * wb.Va * wl.Va_PQ;
             
-            obj.gradVm(1+obj.numGrad.G+obj.numGrad.B:obj.numGrad.G+obj.numGrad.B+obj.numGrad.Vm) = ...
-                obj.gradVm(1+obj.numGrad.G+obj.numGrad.B:obj.numGrad.G+obj.numGrad.B+obj.numGrad.Vm) * wb.Vm * wl.Vm_Vm;
-            obj.gradVa(1+obj.numGrad.G+obj.numGrad.B+obj.numGrad.Vm:end) = ...
-                obj.gradVa(1+obj.numGrad.G+obj.numGrad.B+obj.numGrad.Vm:end) * wb.Va * wl.Va_Va;
+            obj.gradVm = ...
+                obj.gradVm * wb.Vm * wl.Vm_Vm;
+            obj.gradVa = ...
+                obj.gradVa * wb.Va * wl.Va_Va;
             
             % collect the tuned gardient
             obj.grad = obj.gradP + obj.gradQ + obj.gradVm + obj.gradVa;
@@ -1226,10 +1230,7 @@ classdef caseDistributionSystemMeasure < caseDistributionSystem
             par = zeros(obj.numGrad.Sum, 1);
             par(1:obj.numGrad.G) = obj.matOfColDE(obj.dataO.G);
             par(1+obj.numGrad.G:obj.numGrad.G+obj.numGrad.B) = obj.matOfColDE(obj.dataO.B);
-            par(1+obj.numGrad.G+obj.numGrad.B:obj.numGrad.G+obj.numGrad.B+obj.numGrad.Vm) = ...
-                reshape(obj.dataO.Vm(2:end,:), [], 1); % we assume the value of the source bus is already known
-            par(1+obj.numGrad.G+obj.numGrad.B+obj.numGrad.Vm:end) = ...
-                reshape(obj.dataO.Va(2:end,:), [], 1);
+            par(1+obj.numGrad.G+obj.numGrad.B:end) = reshape([obj.dataO.Vm(2:end,:);obj.dataO.Va(2:end,:)], [], 1);
             obj.parChain(:, obj.iter) = par;
         end
         
@@ -1484,10 +1485,9 @@ classdef caseDistributionSystemMeasure < caseDistributionSystem
             B = par(1+obj.numGrad.G:obj.numGrad.G+obj.numGrad.B);
             obj.dataO.G = obj.colToMatDE(G, obj.numBus);
             obj.dataO.B = obj.colToMatDE(B, obj.numBus);
-            Vm = par(1+obj.numGrad.G+obj.numGrad.B:obj.numGrad.G+obj.numGrad.B+obj.numGrad.Vm);
-            Va = par(1+obj.numGrad.G+obj.numGrad.B+obj.numGrad.Vm:end);
-            obj.dataO.Vm(2:end, :) = reshape(Vm, obj.numBus-1, []); % exclude the source bus
-            obj.dataO.Va(2:end, :) = reshape(Va, obj.numBus-1, []); % exclude the source bus
+            VmVa = reshape(par(1+obj.numGrad.G+obj.numGrad.B:end), 2*(obj.numBus-1), obj.numSnap);
+            obj.dataO.Vm(2:end, :) = VmVa(1:obj.numBus-1, :);
+            obj.dataO.Va(2:end, :) = VmVa(obj.numBus:end, :);
             
             % We update the topo
             diagEle = sum(abs(obj.dataO.G)) / 2;
@@ -1536,23 +1536,23 @@ classdef caseDistributionSystemMeasure < caseDistributionSystem
             id = [id_GB; true(obj.numGrad.Vm+obj.numGrad.Va, 1)];
             
             % whether jump back to the last step
-%             if obj.iter-obj.updateLast > 1 && obj.lossChain(1, obj.iter) > obj.lossChain(1, obj.iter-1) * obj.regretRatio % obj.isSecond && 
-%                 obj.isSecond = false;
-%                 obj.isFirst = true;
-%                 obj.iter = obj.iter - 1;
-%                 
-% %                 delta1 = obj.lastState.delta1 / obj.lastState.step * obj.stepMin;
-%                 delta1 = obj.lastState.delta1 / obj.inRatio;
-%                 delta2 = obj.lastState.delta2;
-%                 maxD1 = obj.lastState.maxD1;
-%                 maxD2 = obj.lastState.maxD2;
-%                 obj.gradPast = obj.lastState.gradPast;
-%                 obj.grad = obj.lastState.grad;
-%                 
-% %                 obj.step = obj.stepMin;
-%                 obj.step = obj.step / obj.inRatio;
-%                 obj.lambda = obj.lambda * obj.inRatio;
-%             end
+            if obj.iter-obj.updateLast > 1 && obj.lossChain(1, obj.iter) > obj.lossChain(1, obj.iter-1) * obj.regretRatio % obj.isSecond && 
+                obj.isSecond = false;
+                obj.isFirst = true;
+                obj.iter = obj.iter - 1;
+                
+%                 delta1 = obj.lastState.delta1 / obj.lastState.step * obj.stepMin;
+                delta1 = obj.lastState.delta1 / obj.inRatio;
+                delta2 = obj.lastState.delta2;
+                maxD1 = obj.lastState.maxD1;
+                maxD2 = obj.lastState.maxD2;
+                obj.gradPast = obj.lastState.gradPast;
+                obj.grad = obj.lastState.grad;
+                
+%                 obj.step = obj.stepMin;
+                obj.step = obj.step / obj.inRatio;
+                obj.lambda = obj.lambda * obj.inRatio;
+            end
             % update the delta value
             if ~obj.isFirst % the non regret mode
                 if obj.iter > 1 + obj.updateLast
@@ -1630,11 +1630,9 @@ classdef caseDistributionSystemMeasure < caseDistributionSystem
 %             B(B<0) = 0;
             obj.dataO.G = obj.colToMatDE(G, obj.numBus);
             obj.dataO.B = obj.colToMatDE(B, obj.numBus);
-            
-            Vm = par(1+obj.numGrad.G+obj.numGrad.B:obj.numGrad.G+obj.numGrad.B+obj.numGrad.Vm);
-            Va = par(1+obj.numGrad.G+obj.numGrad.B+obj.numGrad.Vm:end);
-            obj.dataO.Vm(2:end, :) = reshape(Vm, obj.numBus-1, []); % exclude the source bus
-            obj.dataO.Va(2:end, :) = reshape(Va, obj.numBus-1, []); % exclude the source bus
+            VmVa = reshape(par(1+obj.numGrad.G+obj.numGrad.B:end), 2*(obj.numBus-1), obj.numSnap);
+            obj.dataO.Vm(2:end, :) = VmVa(1:obj.numBus-1, :);
+            obj.dataO.Va(2:end, :) = VmVa(obj.numBus:end, :);
             
 %             if obj.isGB
 % %                 delta = zeros(obj.numGrad.G+obj.numGrad.B, 1);
@@ -2063,9 +2061,8 @@ classdef caseDistributionSystemMeasure < caseDistributionSystem
                 % Q estimate
                 Qest = (GBThetaQ * obj.dataO.Vm(:, i)) .* obj.dataO.Vm(:, i);
                 % the id of Vm and Va
-%                 obj.idVmVa = obj.numSnap * (0:obj.numBus-2) + i;
-                obj.idVmVa = (i-1) * (obj.numBus-1) + 1: (i-1) * (obj.numBus-1) + obj.numBus-1;
-                
+                obj.idVm = 2*(obj.numBus-1)*(i-1)+1 : 2*(obj.numBus-1)*(i-1)+obj.numBus-1;
+                obj.idVa = 2*(obj.numBus-1)*(i-1)+obj.numBus : 2*(obj.numBus-1)*(i-1)+2*obj.numBus-2;
                 % calculate the sub-vector of P of all buses
                 for j = 1:obj.numBus
                     if obj.isMeasure.P(j)
@@ -2101,7 +2098,7 @@ classdef caseDistributionSystemMeasure < caseDistributionSystem
                         pt = pt + 1;
                     elseif j > 1 % we can add a judgement here
                         if obj.vaPseudoWeight < 10
-                            obj.M(obj.numGrad.G+obj.numGrad.B+obj.numGrad.Vm+obj.idVmVa(j-1), pt) ...
+                            obj.M(obj.numGrad.G+obj.numGrad.B+obj.idVa(j-1), pt) ...
                                 = (obj.sigma.Va(j)*obj.vaPseudoWeight).^(-1);
                             pt = pt + 1;
                         end
@@ -2164,14 +2161,14 @@ classdef caseDistributionSystemMeasure < caseDistributionSystem
 %             h_Vm(bus) = h_Vm(bus) + sum(fOrderVm);
             h_Vm(bus) = obj.dataO.G(bus, bus) * obj.dataO.Vm(bus, snap) ...
                 + obj.data.P_noised(bus, snap) / obj.dataO.Vm(bus, snap);
-            g(obj.numGrad.G+obj.numGrad.B+obj.idVmVa) = h_Vm(2:end);
+            g(obj.numGrad.G+obj.numGrad.B+obj.idVm) = h_Vm(2:end);
             
             % Va
             h_Va = obj.dataO.Vm(bus, snap) * obj.dataO.Vm(:, snap) .* GBThetaQ(:, bus);
             h_Va(bus) = - obj.dataO.Vm(bus, snap)^2 * obj.dataO.B(bus, bus)...
                        - obj.data.Q_noised(bus, snap); 
 %             h_Va(bus) = h_Va(bus)-sum(GBThetaQ(bus, :) * obj.dataO.Vm(:, snap) * obj.dataO.Vm(bus, snap));
-            g(obj.numGrad.G+obj.numGrad.B+obj.numGrad.Vm+obj.idVmVa) = h_Va(2:end);
+            g(obj.numGrad.G+obj.numGrad.B+obj.idVa) = h_Va(2:end);
             
             % build HP, gradP and loss.P
             lossThis = (Pest(bus) - obj.data.P_noised(bus, snap));
@@ -2219,13 +2216,13 @@ classdef caseDistributionSystemMeasure < caseDistributionSystem
 %             h_Vm(bus) = h_Vm(bus) + sum(fOrderVm);
             h_Vm(bus) = - obj.dataO.B(bus, bus) * obj.dataO.Vm(bus, snap) ...
                 + obj.data.Q_noised(bus, snap) / obj.dataO.Vm(bus, snap);
-            g(obj.numGrad.G+obj.numGrad.B+obj.idVmVa) = h_Vm(2:end);
+            g(obj.numGrad.G+obj.numGrad.B+obj.idVm) = h_Vm(2:end);
             
             % Va
             h_Va = - obj.dataO.Vm(bus, snap) * obj.dataO.Vm(:, snap) .* GBThetaP(:, bus);
             h_Va(bus) = - obj.dataO.Vm(bus, snap)^2 * obj.dataO.G(bus, bus) ...
                         + obj.data.P_noised(bus, snap);
-            g(obj.numGrad.G+obj.numGrad.B+obj.numGrad.Vm+obj.idVmVa) = h_Va(2:end);
+            g(obj.numGrad.G+obj.numGrad.B+obj.idVa) = h_Va(2:end);
             
             % build HQ, GradientQ and lossQ
             lossThis = (Qest(bus) - obj.data.Q_noised(bus, snap));
@@ -2251,12 +2248,12 @@ classdef caseDistributionSystemMeasure < caseDistributionSystem
             % build GradientVm and lossVm
             lossThis = (obj.dataO.Vm(bus, snap) - obj.data.Vm_noised(bus, snap));
             obj.loss.Vm = obj.loss.Vm + lossThis^2 * obj.sigma.Vm(bus).^(-2);
-            obj.gradVm(obj.numGrad.G+obj.numGrad.B+obj.idVmVa(bus-1)) = ...
-                obj.gradVm(obj.numGrad.G+obj.numGrad.B+obj.idVmVa(bus-1)) + obj.sigma.Vm(bus).^(-2) * lossThis;
+            obj.gradVm(obj.numGrad.G+obj.numGrad.B+obj.idVm(bus-1)) = ...
+                obj.gradVm(obj.numGrad.G+obj.numGrad.B+obj.idVm(bus-1)) + obj.sigma.Vm(bus).^(-2) * lossThis;
 %             obj.M(obj.numGrad.G+obj.numGrad.B+obj.idVmVa(bus-1), pt) = obj.sigma.Vm(bus).^(-1);
             if ~obj.isLBFGS
                 l = 1;
-                obj.mRow(obj.spt:obj.spt+l-1) = obj.numGrad.G+obj.numGrad.B+obj.idVmVa(bus-1);
+                obj.mRow(obj.spt:obj.spt+l-1) = obj.numGrad.G+obj.numGrad.B+obj.idVm(bus-1);
                 obj.mCol(obj.spt:obj.spt+l-1) = pt;
                 obj.mVal(obj.spt:obj.spt+l-1) = obj.sigma.Vm(bus).^(-1);
                 obj.spt = obj.spt + l;
@@ -2269,12 +2266,12 @@ classdef caseDistributionSystemMeasure < caseDistributionSystem
             % build HVa, GradientVa and lossVa
             lossThis = (obj.dataO.Va(bus, snap) - obj.data.Va_noised(bus, snap));
             obj.loss.Va = obj.loss.Va + lossThis^2 * obj.sigma.Va(bus).^(-2);
-            obj.gradVa(obj.numGrad.G+obj.numGrad.B+obj.numGrad.Vm+obj.idVmVa(bus-1)) = ...
-                obj.gradVa(obj.numGrad.G+obj.numGrad.B+obj.numGrad.Vm+obj.idVmVa(bus-1)) + obj.sigma.Va(bus).^(-2) * lossThis;
+            obj.gradVa(obj.numGrad.G+obj.numGrad.B+obj.idVa(bus-1)) = ...
+                obj.gradVa(obj.numGrad.G+obj.numGrad.B+obj.idVa(bus-1)) + obj.sigma.Va(bus).^(-2) * lossThis;
 %             obj.M(obj.numGrad.G+obj.numGrad.B+obj.numGrad.Vm+obj.idVmVa(bus-1), pt) = obj.sigma.Va(bus).^(-1);
             if ~obj.isLBFGS
                 l = 1;
-                obj.mRow(obj.spt:obj.spt+l-1) = obj.numGrad.G+obj.numGrad.B+obj.numGrad.Vm+obj.idVmVa(bus-1);
+                obj.mRow(obj.spt:obj.spt+l-1) = obj.numGrad.G+obj.numGrad.B+obj.idVa(bus-1);
                 obj.mCol(obj.spt:obj.spt+l-1) = pt;
                 obj.mVal(obj.spt:obj.spt+l-1) = obj.sigma.Va(bus).^(-1);
                 obj.spt = obj.spt + l;
