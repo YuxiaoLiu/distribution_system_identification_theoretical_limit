@@ -187,6 +187,15 @@ classdef caseDistributionSystem < handle
             
             switch obj.caseName
                 case 'case3_dist'
+                    obj.topoPrior = true(obj.numBus, obj.numBus);
+                    obj.topoPrior(obj.data.G ~= 0) = false;
+                    idBranchOptional = obj.mpc.branch(:, 11) == 0;
+                    idRow = obj.mpc.branch(idBranchOptional, 1);
+                    idCol = obj.mpc.branch(idBranchOptional, 2);
+                    for i = 1:length(idRow)
+                        obj.topoPrior(idRow(i), idCol(i)) = false;
+                        obj.topoPrior(idCol(i), idRow(i)) = false;
+                    end
                 case 'case33bw'
                     obj.topoPrior = true(obj.numBus, obj.numBus);
                     obj.topoPrior(obj.data.G ~= 0) = false;
@@ -234,6 +243,7 @@ classdef caseDistributionSystem < handle
             obj.isMeasure.Va = true(obj.numBus, 1); % false
             obj.isMeasure.Vm(1) = false;
             obj.isMeasure.Va(1) = false;
+%             obj.isMeasure.Va(3) = false;
 %             obj.isMeasure.Va(4) = false;
 %             obj.isMeasure.Va(2:5) = true(length(2:5), 1);
 %             obj.isMeasure.Q(2:3) = false(2, 1);
@@ -807,10 +817,17 @@ classdef caseDistributionSystem < handle
             while (numDisconnect > 1e-4)
                 obj = calBound(obj, obj.sparseOption, obj.topoPrior);
                 obj.boundIter = [obj.boundIter; obj.bound];
-                topoPriorNext = obj.data.GBzero & (obj.bound.G_relative < obj.topoTol);
+                diagEle = sum(abs(obj.data.G)) / 2;
+                ratio1 = abs(bsxfun(@rdivide, obj.bound.G, diagEle));
+                ratio2 = abs(bsxfun(@rdivide, obj.bound.G, diagEle'));
+                ratio = min(ratio1, ratio2);
+                topoPriorNext = ratio < obj.topoTol;
+                topoPriorNext = obj.data.GBzero & topoPriorNext;
+%                 topoPriorNext = obj.data.GBzero & (obj.bound.G_relative < obj.topoTol);
                 numDisconnect = sum(sum(triu(topoPriorNext) - triu(obj.topoPrior)));
                 fprintf('We disconnect %d branches\n', numDisconnect);
                 obj.topoPrior = triu(topoPriorNext) | triu(topoPriorNext, -1)';
+%                 obj.topoPrior = topoPriorNext;
             end
             obj.acc = sum(sum(obj.data.G~=0))/sum(sum(obj.bound.G~=0));
             fprintf('The theoretical topology identification limit is %f\n', obj.acc);

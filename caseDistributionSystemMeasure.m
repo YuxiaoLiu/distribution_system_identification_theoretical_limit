@@ -106,6 +106,15 @@ classdef caseDistributionSystemMeasure < caseDistributionSystem
         updateLast          % the last update step
         updateLastLoss      % the last loss function
         updateRatioLast     % the last topology update ratio
+        
+        isLBFGS             % whether we use the LBFGS method or the newton method
+        numStore            % the number of parameters we want to store in our memory
+        numEstH             % the number of history we use to estimate the H
+        sChain              % the Chain of s_k = x_k+1 - x_k
+        yChain              % the Chain of y_k = g_k+1 - g_k
+        rhoChain            % the Chain of rho_k = 1/(y_k^T * s_k)
+        
+        isLHinv             % whether we use the low memory version to get the inverse
     end
     
     methods
@@ -1324,6 +1333,9 @@ classdef caseDistributionSystemMeasure < caseDistributionSystem
 %             obj.ratioMaxMin = 1e4;
             obj.lambdaCompen = 1e4; % the additional compensate when second order is too large 1e2
             
+            obj.isLHinv = true;
+            obj.isLBFGS = false;
+            obj.numEstH = 4;
             
             obj.vaPseudoWeightInit = 100;
             obj.vaPseudoWeight = obj.vaPseudoWeightInit;
@@ -1402,6 +1414,9 @@ classdef caseDistributionSystemMeasure < caseDistributionSystem
             obj.ratioChain = zeros(1, obj.maxIter);
             obj.maxD2Chain = zeros(1, obj.maxIter);
             obj.D2D1Chain = zeros(1, obj.maxIter);
+            obj.sChain = zeros(obj.numGrad.Sum, obj.maxIter);
+            obj.yChain = zeros(obj.numGrad.Sum, obj.maxIter);
+            obj.rhoChain = zeros(1, obj.maxIter);
 %             obj.secondChain = zeros(1, obj.maxIter);
             obj.isGB = false;
             obj.isConverge = 0;
@@ -1426,12 +1441,12 @@ classdef caseDistributionSystemMeasure < caseDistributionSystem
                     continue;
                 end
 %                 profile on;
-%                 % do the pseudo PF
-%                 if ~all(obj.isMeasure.Va(2:end)) ...
-%                         && ~obj.isFirst && obj.iter > 1 ...
-%                         && log10(obj.loss.total / obj.lossMin) < obj.startPF% We do not calculate the PF for the regret mode
-% %                     obj = updateParPF(obj);
-%                 end
+                % do the pseudo PF
+                if ~all(obj.isMeasure.Va(2:end)) ...
+                        && ~obj.isFirst && obj.iter > 1 ...
+                        && log10(obj.loss.total / obj.lossMin) < obj.startPF% We do not calculate the PF for the regret mode
+%                     obj = updateParPF(obj);
+                end
                 % collect the parameter vector
                 obj = collectPar(obj);
                 % build the Hessian
@@ -1448,13 +1463,13 @@ classdef caseDistributionSystemMeasure < caseDistributionSystem
 %                 profile off;
 %                 profile viewer;
             end
-            obj.lossChain(:, obj.iter:end) = [];
-            obj.parChain(:, obj.iter:end) = [];
-            obj.stepChain(:, obj.iter:end) = [];
-            obj.lambdaChain(:, obj.iter:end) = [];
-            obj.ratioMaxChain(:, obj.iter:end) = [];
-            obj.maxD2Chain(:, obj.iter:end) = [];
-            obj.D2D1Chain(:, obj.iter:end) = [];
+            obj.lossChain(:, obj.iter+1:end) = [];
+            obj.parChain(:, obj.iter+1:end) = [];
+            obj.stepChain(:, obj.iter+1:end) = [];
+            obj.lambdaChain(:, obj.iter+1:end) = [];
+            obj.ratioMaxChain(:, obj.iter+1:end) = [];
+            obj.maxD2Chain(:, obj.iter+1:end) = [];
+            obj.D2D1Chain(:, obj.iter+1:end) = [];
             
         end
         
@@ -1555,7 +1570,11 @@ classdef caseDistributionSystemMeasure < caseDistributionSystem
 
                 obj.gradPast = moment;
                 delta1 = obj.step * moment(id);
-                delta2 = obj.H(id, id) \ obj.gradOrigin(id);
+                if ~obj.isLBFGS
+                    delta2 = obj.H(id, id) \ obj.gradOrigin(id);
+                else
+                    [obj, delta2] = doLBFGS(obj);
+                end
                 maxD1 = max(abs(delta1));
                 maxD2 = max(abs(delta2));
                 D2D1Ratio = maxD2/(maxD1/obj.step);
@@ -1600,7 +1619,7 @@ classdef caseDistributionSystemMeasure < caseDistributionSystem
             
             disp(obj.lambda);
             
-%             delta = delta1 * obj.lambda/(1+obj.lambda) + delta2 * 1/(1+obj.lambda);
+%             delta = delta2;
             obj.lambdaChain(obj.iter) = obj.lambda;
             par = zeros(obj.numGrad.Sum, 1);
             
@@ -1719,6 +1738,37 @@ classdef caseDistributionSystemMeasure < caseDistributionSystem
 %             if obj.loss.total < obj.lossMin
 %                 obj.isConverge = 3;
 %             end
+        end
+        
+        function [obj, delta] = doLBFGS(obj)
+            % This method conduct the L-BFGS algorithm to update the delta
+            % value using far less memory
+            if obj.iter == 1
+                delta = obj.gradOrigin;
+                return;
+            end
+            
+            % begin the iteration loop
+            k = obj.iter;
+            m = obj.numEstH;
+            id_GB = [obj.Tvec; obj.Tvec];
+            id = [id_GB; true(obj.numGrad.Vm+obj.numGrad.Va, 1)];
+            q = obj.gradOrigin(id);
+            alpha = zeros(length(k-1:-1:max(k-m, 1)), 1);
+            for i = k-1:-1:max(k-m, 1)
+                pt = i-max(k-m, 1)+1;
+                alpha(pt) = obj.rhoChain(i) * obj.sChain(id, i)' * q;
+                q = q - alpha(pt) * obj.yChain(id, i);
+            end
+            r = (obj.sChain(id, k-1)' * obj.yChain(id, k-1)) / (obj.yChain(id, k-1)' * obj.yChain(id, k-1));
+            H0 = r * speye(sum(id));
+            z = H0 * q;
+            for i = max(k-m, 1):k-1
+                pt = i-max(k-m, 1)+1;
+                beta = obj.rhoChain(i) * obj.yChain(id, i)' * z;
+                z = z + obj.sChain(id, i) * (alpha(pt) - beta);
+            end
+            delta = z;
         end
         
         function obj = buildJacobian(obj)
@@ -1977,11 +2027,18 @@ classdef caseDistributionSystemMeasure < caseDistributionSystem
             obj.loss.Va = 0;
             
             %initialize the sparsify measurement matrix
-            numVector = obj.numSnap * obj.numBus * ((obj.numBus-1)*4*2 + 2);
-            obj.mRow = zeros(1, numVector);
-            obj.mCol = zeros(1, numVector);
-            obj.mVal = zeros(1, numVector);
-            obj.spt = 1;
+            if ~obj.isLBFGS
+                numVector = obj.numSnap * obj.numBus * ((obj.numBus-1)*4*2 + 2);
+                obj.mRow = zeros(1, numVector);
+                obj.mCol = zeros(1, numVector);
+                obj.mVal = zeros(1, numVector);
+                obj.spt = 1;
+            end
+%             numVector = obj.numSnap * obj.numBus * ((obj.numBus-1)*4*2 + 2);
+%             obj.mRow = zeros(1, numVector);
+%             obj.mCol = zeros(1, numVector);
+%             obj.mVal = zeros(1, numVector);
+%             obj.spt = 1;
             
             % Initialize the idGB
             obj.idGB = zeros(obj.numBus, obj.numBus);
@@ -2057,11 +2114,27 @@ classdef caseDistributionSystemMeasure < caseDistributionSystem
             % collect the gradients, the losses, and compute the Hessian
             obj.grad = obj.gradP + obj.gradQ + obj.gradVm + obj.gradVa;
             obj.loss.total = obj.loss.P + obj.loss.Q + obj.loss.Vm + obj.loss.Va;
-            obj.mRow(obj.spt:end) = [];
-            obj.mCol(obj.spt:end) = [];
-            obj.mVal(obj.spt:end) = [];
-            Ms = sparse(obj.mRow, obj.mCol, obj.mVal, obj.numFIM.Sum, obj.numMeasure);
-            obj.H = Ms * Ms';
+            if ~obj.isLBFGS
+                obj.mRow(obj.spt:end) = [];
+                obj.mCol(obj.spt:end) = [];
+                obj.mVal(obj.spt:end) = [];
+                Ms = sparse(obj.mRow, obj.mCol, obj.mVal);%, obj.numFIM.Sum, obj.numMeasure);
+                obj.H = Ms * Ms';
+            elseif obj.iter > 1 % update the sChain and the yChain
+                id_GB = [obj.Tvec; obj.Tvec];
+                id = [id_GB; true(obj.numGrad.Vm+obj.numGrad.Va, 1)];
+                obj.sChain(id, obj.iter-1) = obj.parChain(id, obj.iter) - obj.parChain(id, obj.iter-1);
+                test = obj.grad(id) - obj.gradOrigin(id);
+                if sum(abs(test)) > 1e-5
+                    obj.yChain(id, obj.iter-1) = test;
+                end
+                obj.rhoChain(obj.iter-1) = 1/(obj.yChain(id, obj.iter-1)' * obj.sChain(id, obj.iter-1));
+            end
+%             obj.mRow(obj.spt:end) = [];
+%             obj.mCol(obj.spt:end) = [];
+%             obj.mVal(obj.spt:end) = [];
+%             Ms = sparse(obj.mRow, obj.mCol, obj.mVal, obj.numFIM.Sum, obj.numMeasure);
+%             obj.H = Ms * Ms';
         end
         
         function obj = buildMeasureP(obj, snap, bus, GBThetaP, GBThetaQ, Pest, pt)
@@ -2110,12 +2183,14 @@ classdef caseDistributionSystemMeasure < caseDistributionSystem
 %             g = obj.sigma.P(bus).^(-1) * g;
 %             assert(sum(abs(g-obj.M(:, pt))) < 1e-9);
 %             obj.M(:, pt) = obj.sigma.P(bus).^(-1) * g;
-            [row,col,val] = find(g);
-            l = length(val);
-            obj.mRow(obj.spt:obj.spt+l-1) = row;
-            obj.mCol(obj.spt:obj.spt+l-1) = col*pt;
-            obj.mVal(obj.spt:obj.spt+l-1) = val*obj.sigma.P(bus).^(-1);
-            obj.spt = obj.spt + l;
+            if ~obj.isLBFGS
+                [row,col,val] = find(g);
+                l = length(val);
+                obj.mRow(obj.spt:obj.spt+l-1) = row;
+                obj.mCol(obj.spt:obj.spt+l-1) = col*pt;
+                obj.mVal(obj.spt:obj.spt+l-1) = val*obj.sigma.P(bus).^(-1);
+                obj.spt = obj.spt + l;
+            end
         end
         
         function obj = buildMeasureQ(obj, snap, bus, GBThetaP, GBThetaQ, Qest, pt)
@@ -2158,12 +2233,14 @@ classdef caseDistributionSystemMeasure < caseDistributionSystem
             gradQThis = obj.sigma.Q(bus).^(-2) * lossThis * g;
             obj.gradQ = obj.gradQ + gradQThis;
 %             obj.M(:, pt) = obj.sigma.Q(bus).^(-1) * g;
-            [row,col,val] = find(g);
-            l = length(val);
-            obj.mRow(obj.spt:obj.spt+l-1) = row;
-            obj.mCol(obj.spt:obj.spt+l-1) = col*pt;
-            obj.mVal(obj.spt:obj.spt+l-1) = val*obj.sigma.Q(bus).^(-1);
-            obj.spt = obj.spt + l;
+            if ~obj.isLBFGS
+                [row,col,val] = find(g);
+                l = length(val);
+                obj.mRow(obj.spt:obj.spt+l-1) = row;
+                obj.mCol(obj.spt:obj.spt+l-1) = col*pt;
+                obj.mVal(obj.spt:obj.spt+l-1) = val*obj.sigma.Q(bus).^(-1);
+                obj.spt = obj.spt + l;
+            end
 %             HQThis = obj.sigma.Q(bus).^(-2) * (g * g');
 %             obj.HQ = obj.HQ + HQThis;
         end
@@ -2177,11 +2254,13 @@ classdef caseDistributionSystemMeasure < caseDistributionSystem
             obj.gradVm(obj.numGrad.G+obj.numGrad.B+obj.idVmVa(bus-1)) = ...
                 obj.gradVm(obj.numGrad.G+obj.numGrad.B+obj.idVmVa(bus-1)) + obj.sigma.Vm(bus).^(-2) * lossThis;
 %             obj.M(obj.numGrad.G+obj.numGrad.B+obj.idVmVa(bus-1), pt) = obj.sigma.Vm(bus).^(-1);
-            l = 1;
-            obj.mRow(obj.spt:obj.spt+l-1) = obj.numGrad.G+obj.numGrad.B+obj.idVmVa(bus-1);
-            obj.mCol(obj.spt:obj.spt+l-1) = pt;
-            obj.mVal(obj.spt:obj.spt+l-1) = obj.sigma.Vm(bus).^(-1);
-            obj.spt = obj.spt + l;
+            if ~obj.isLBFGS
+                l = 1;
+                obj.mRow(obj.spt:obj.spt+l-1) = obj.numGrad.G+obj.numGrad.B+obj.idVmVa(bus-1);
+                obj.mCol(obj.spt:obj.spt+l-1) = pt;
+                obj.mVal(obj.spt:obj.spt+l-1) = obj.sigma.Vm(bus).^(-1);
+                obj.spt = obj.spt + l;
+            end
         end
         
         function obj = buildMeasureVa(obj, snap, bus, pt)
@@ -2193,11 +2272,13 @@ classdef caseDistributionSystemMeasure < caseDistributionSystem
             obj.gradVa(obj.numGrad.G+obj.numGrad.B+obj.numGrad.Vm+obj.idVmVa(bus-1)) = ...
                 obj.gradVa(obj.numGrad.G+obj.numGrad.B+obj.numGrad.Vm+obj.idVmVa(bus-1)) + obj.sigma.Va(bus).^(-2) * lossThis;
 %             obj.M(obj.numGrad.G+obj.numGrad.B+obj.numGrad.Vm+obj.idVmVa(bus-1), pt) = obj.sigma.Va(bus).^(-1);
-            l = 1;
-            obj.mRow(obj.spt:obj.spt+l-1) = obj.numGrad.G+obj.numGrad.B+obj.numGrad.Vm+obj.idVmVa(bus-1);
-            obj.mCol(obj.spt:obj.spt+l-1) = pt;
-            obj.mVal(obj.spt:obj.spt+l-1) = obj.sigma.Va(bus).^(-1);
-            obj.spt = obj.spt + l;
+            if ~obj.isLBFGS
+                l = 1;
+                obj.mRow(obj.spt:obj.spt+l-1) = obj.numGrad.G+obj.numGrad.B+obj.numGrad.Vm+obj.idVmVa(bus-1);
+                obj.mCol(obj.spt:obj.spt+l-1) = pt;
+                obj.mVal(obj.spt:obj.spt+l-1) = obj.sigma.Va(bus).^(-1);
+                obj.spt = obj.spt + l;
+            end
         end
         
         function obj = buildHessian(obj)
