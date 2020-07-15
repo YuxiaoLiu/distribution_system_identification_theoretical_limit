@@ -1326,7 +1326,7 @@ classdef caseDistributionSystemMeasure < caseDistributionSystem
 %             obj.secondMin = 1e-2;
             
             obj.lambda = 1e1; % the proportion of first order gradient
-            obj.lambdaMin = 0.1;
+            obj.lambdaMin = 0;
             obj.lambdaMax = 1e2;%1e3 1e2;
             obj.ratioMax = 1e3; % the ratio of second order / first order (final value)1e4
             obj.ratioMaxConst = 1e4; % 1e4
@@ -1360,7 +1360,7 @@ classdef caseDistributionSystemMeasure < caseDistributionSystem
             obj.updateLast = 0;
             obj.updateLastLoss = 1e2;       % times the lossMin
             
-            obj.maxIter = 2000;
+            obj.maxIter = 500;
             obj.thsTopo = 0.05;
             obj.Topo = ~obj.topoPrior;
             obj.Tvec = logical(obj.matOfColDE(obj.Topo));
@@ -1570,8 +1570,11 @@ classdef caseDistributionSystemMeasure < caseDistributionSystem
 
                 obj.gradPast = moment;
                 delta1 = obj.step * moment(id);
-                if ~obj.isLBFGS
+                if ~obj.isLBFGS && ~obj.isLHinv
                     delta2 = obj.H(id, id) \ obj.gradOrigin(id);
+                elseif obj.isLHinv
+%                     delta2 = (obj.M(id, :) * obj.M(id, :)') \ obj.gradOrigin(id);
+                    [obj, delta2] = calLHInv(obj, id);
                 else
                     [obj, delta2] = doLBFGS(obj);
                 end
@@ -1736,6 +1739,51 @@ classdef caseDistributionSystemMeasure < caseDistributionSystem
 %             if obj.loss.total < obj.lossMin
 %                 obj.isConverge = 3;
 %             end
+        end
+        
+        function [obj, delta] = calLHInv(obj, id)
+            % This method calculate the d = H\g in a memory saving manner
+            % We firstly divide the matrix
+%             profile on
+%             deltaTrue = (obj.M * obj.M') \ obj.gradOrigin;
+            
+            % split the matrices
+            numMea = size(obj.M, 2);
+            numGB = obj.numGrad.G+obj.numGrad.B-2*obj.numGrad.del;
+            idSplit = [numGB ones(1, obj.numSnap)*2*(obj.numBus-1)];
+            obj.M = mat2cell(obj.M(id, :), idSplit, numMea);
+            gradSplit = mat2cell(obj.gradOrigin(id), idSplit, 1);
+            A = full(obj.M{1}*obj.M{1}');
+            
+            % calculate the value of x_1 or deltaGB
+            % x_1 = (A-B/CB')\(g_1-B/Cg_2)
+            invC = cellfun(@(m) inv(full(m*m')), obj.M(2:end), 'UniformOutput', false);
+%             deltaVaVmSplit = cell(obj.numSnap, 1);
+%             deltaSplit = cellfun(@(m, g) (m*m')\g, obj.M, gradSplit, 'UniformOutput', false);
+            BCB = zeros(numGB); % B/CB'
+            BCg = zeros(numGB, 1); % B/Cg_2
+            BCBCell = cell(obj.numSnap, 1);
+            for i = 1:obj.numSnap
+                B = full(obj.M{1} * obj.M{i+1}');
+                BC = B*invC{i};
+                BCBCell{i} = BC*B';
+                BCB = BCB + BC*B';
+                BCg = BCg + BC*gradSplit{i+1};
+            end
+            deltaGB = (A - BCB) \ (gradSplit{1} - BCg);
+            
+            % calculate the value of x_2 or deltaVmVa
+            deltaVmVa = cell(obj.numSnap, 1);
+            for i = 1:obj.numSnap
+                B = full(obj.M{1} * obj.M{i+1}');
+                deltaVmVa{i} = invC{i}*(gradSplit{i+1}-B'*deltaGB);
+            end
+%             deltaVmVa = cellfun(@(invc, gVmVa, m) invc*(gVmVa-full(m*obj.M{1}')*deltaGB), invC, gradSplit(2:end), obj.M(2:end), 'UniformOutput', false);
+            deltaVmVa = cell2mat(deltaVmVa);
+            delta = [deltaGB; deltaVmVa];
+            
+%             profile off;
+%             profile viewer;
         end
         
         function [obj, delta] = doLBFGS(obj)
@@ -2116,7 +2164,11 @@ classdef caseDistributionSystemMeasure < caseDistributionSystem
                 obj.mCol(obj.spt:end) = [];
                 obj.mVal(obj.spt:end) = [];
                 Ms = sparse(obj.mRow, obj.mCol, obj.mVal);%, obj.numFIM.Sum, obj.numMeasure);
-                obj.H = Ms * Ms';
+                if ~obj.isLHinv
+                    obj.H = Ms * Ms';
+                else
+                    obj.M = Ms;
+                end
             elseif obj.iter > 1 % update the sChain and the yChain
                 id_GB = [obj.Tvec; obj.Tvec];
                 id = [id_GB; true(obj.numGrad.Vm+obj.numGrad.Va, 1)];

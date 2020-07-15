@@ -5,8 +5,8 @@
 %% We set some hyper parameters
 clear;clc;
 warning off
-caseName = 'case3_dist';     % the case name    'case3_dist' 'case33bw'  'case141'
-numSnap = 10;             % the number of snapshot
+caseName = 'case141';     % the case name    'case3_dist' 'case33bw'  'case141'
+numSnap = 200;             % the number of snapshot
 range.P = 1.2;               % the deviation range of active load 0.6
 range.Q = 0.3;             % the deviation range of reactive load to active load 0.2
 
@@ -65,9 +65,9 @@ caseDS = caseDS.genOperateData;
 caseDS = caseDS.setAccuracy(ratio);
 caseDS = caseDS.setTopo;
 % profile on
-caseDS = caseDS.buildFIM;
+% caseDS = caseDS.buildFIM;
 % caseDS = caseDS.calBound(caseDS.topoPrior);
-caseDS = caseDS.updateTopo(caseDS.topoPrior);
+% caseDS = caseDS.updateTopo(caseDS.topoPrior);
 % profile off
 % profile viewer
 % caseDS = caseDS.iterateY;
