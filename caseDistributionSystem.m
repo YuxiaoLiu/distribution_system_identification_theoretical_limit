@@ -150,7 +150,11 @@ classdef caseDistributionSystem < handle
                 mpcThis = obj.mpc;
                 % update active and reactive load
                 mpcThis.bus(2:end,3) = mpcThis.bus(2:end,3) .* obj.loadP(:, i);
-                mpcThis.bus(2:end,4) = mpcThis.bus(2:end,4) .* obj.loadQ(:, i);
+                if obj.caseName == 'case123_R'
+                    mpcThis.bus(2:end,4) = mpcThis.bus(2:end,4) .* obj.loadQ(:, i) * 2;
+                else
+                    mpcThis.bus(2:end,4) = mpcThis.bus(2:end,4) .* obj.loadQ(:, i);
+                end
                 % run power flow
                 mpopt = mpoption('verbose',0,'out.all',0);
                 mpcThis = runpf(mpcThis, mpopt);
@@ -208,7 +212,7 @@ classdef caseDistributionSystem < handle
                         obj.topoPrior(idRow(i), idCol(i)) = false;
                         obj.topoPrior(idCol(i), idRow(i)) = false;
                     end
-                case 'case141'
+                case 'case123_R'
                     obj.topoPrior = true(obj.numBus, obj.numBus);
                     obj.topoPrior(obj.data.G ~= 0) = false;
                     idBranchOptional = obj.mpc.branch(:, 11) == 0;
@@ -220,7 +224,7 @@ classdef caseDistributionSystem < handle
                     end
             end
             
-            obj.topoPrior = false(obj.numBus, obj.numBus); % do not consider any topology priors
+%             obj.topoPrior = false(obj.numBus, obj.numBus); % do not consider any topology priors
         end
         
         function obj = setAccuracy(obj, varargin)

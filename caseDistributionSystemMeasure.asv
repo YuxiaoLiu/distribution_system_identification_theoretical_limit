@@ -134,6 +134,8 @@ classdef caseDistributionSystemMeasure < caseDistributionSystem
                 obj.prior.Gmin = 0.1;
                 obj.prior.Bmin = 0.1;
                 obj.prior.ratio = 0.05;
+                obj.prior.Gmax = 1000;
+                obj.prior.Bmax = 1000;
             end
             
             % we first evaluate the vm and the va
@@ -539,12 +541,12 @@ classdef caseDistributionSystemMeasure < caseDistributionSystem
             % This method approximates the Y matrix by the measurements. We
             % use the simple Ohom's law to provide an initial value of Y.
             % We also assume the G/B ratio is a constant.
-            rng(103);
-            randG = 0.75 + 0.5 * randn(size(obj.data.G));
-            rng(104);
-            randB = 0.75 + 0.5 * randn(size(obj.data.B));
-            obj.dataE.G = obj.data.G .* randG;
-            obj.dataE.B = obj.data.B .* randB;
+%             rng(103);
+%             randG = 0.75 + 0.5 * randn(size(obj.data.G));
+%             rng(104);
+%             randB = 0.75 + 0.5 * randn(size(obj.data.B));
+%             obj.dataE.G = obj.data.G .* randG;
+%             obj.dataE.B = obj.data.B .* randB;
 %             % The approximation of the diagonal elements
 %             diagG = diag(obj.dataE.G);
 %             diagB = diag(obj.dataE.B);
@@ -552,68 +554,82 @@ classdef caseDistributionSystemMeasure < caseDistributionSystem
             % approximate the topology using Vm data only
             % ranking the Vm
 %             Vm = obj.data.Vm_noised;
-            Vm = obj.data.Vm;
-            Topo = logical(eye(obj.numBus));
-            VmMean = mean(Vm, 2);
-            [~, VmOrder] = sort(VmMean,'descend');
-            
-            assert (VmOrder(1) == 1); % the first bus is the source bus
-            
-            Vm = movmean(Vm, floor(obj.numSnap/20)+1, 2);
-            corr = corrcoef(Vm');
-            corr(isnan(corr)) = 0; % one can also simulate some disturbance in the source bus voltage
-            for i = 2:obj.numBus
-                % iterate each bus
-                [~, loc] = max(corr(VmOrder(i), VmOrder(1:i-1))); % the location of the connected bus
-                Topo(VmOrder(i), VmOrder(loc)) = true;
-                Topo(VmOrder(loc), VmOrder(i)) = true;
-            end
-            
-            T = obj.data.G~=0;
+            if 1>2
+                IP = obj.data.IP_noised;
+                IQ = obj.data.IQ_noised;
+                G = IP * obj.data.Vm_noised' / (obj.data.Vm_noised * obj.data.Vm_noised');
+                B = - IQ * obj.data.Vm_noised' / (obj.data.Vm_noised * obj.data.Vm_noised');
+            else
+                IP = obj.data.IP_noised;
+                IQ = obj.data.IQ_noised;
+                Vm = obj.data.Vm;
+                Topo = logical(eye(obj.numBus));
+                VmMean = mean(Vm, 2);
+                [~, VmOrder] = sort(VmMean,'descend');
 
-            % approximate the parameter
-            IP = obj.data.IP_noised;
-            IQ = obj.data.IQ_noised;
-            G = IP * obj.data.Vm_noised' / (obj.data.Vm_noised * obj.data.Vm_noised');
-            B = - IQ * obj.data.Vm_noised' / (obj.data.Vm_noised * obj.data.Vm_noised');
-            G_ols = zeros(obj.numBus, obj.numBus);
-            B_ols = zeros(obj.numBus, obj.numBus);
-            for i = 1:obj.numBus
-                j = VmOrder(i);
-                filter = Topo(:, j);
-                filter(j) = false;
-                previous = VmOrder(1:i);
-                previous = intersect(previous, find(filter));
-                
-                VmDelta = Vm(filter, :) - repmat(Vm(j, :), sum(filter), 1);
-                yG = IP(i, :);
-                yB = IQ(i, :);
-                try
-                    yG = yG - G_ols(previous, j) * VmDelta(filter(previous), :);
-                    yB = yB + B_ols(previous, j) * VmDelta(filter(previous), :);
-                catch
-                    assert (i == 1);
+                assert (VmOrder(1) == 1); % the first bus is the source bus
+
+                Vm = movmean(Vm, floor(obj.numSnap/20)+1, 2);
+                corr = corrcoef(Vm');
+                corr(isnan(corr)) = 0; % one can also simulate some disturbance in the source bus voltage
+                corr(obj.topoPrior) = -2;
+                for i = 2:obj.numBus
+                    % iterate each bus
+                    [~, loc] = max(corr(VmOrder(i), VmOrder(1:i-1))); % the location of the connected bus
+                    Topo(VmOrder(i), VmOrder(loc)) = true;
+                    Topo(VmOrder(loc), VmOrder(i)) = true;
                 end
-                
-                rng(i);
-                filter(previous) = false;
-                VmDelta = Vm(filter, :) - repmat(Vm(j, :), sum(filter), 1);
-%                 G_ols(j, filter) = obj.tls(VmDelta', yG');
-                G_ols(j, filter) = yG * VmDelta' / (VmDelta * VmDelta');
-                outlier = G_ols(j,:) > -obj.prior.Gmin;
-                G_ols(j, filter & outlier') = - obj.prior.Gmin * (1+0.1*rand());
-                G_ols(filter, j) = G_ols(j, filter);
-                G_ols(j, j) = -sum(G_ols(j, :));
-                
-                B_ols(j, filter) = - yB * VmDelta' / (VmDelta * VmDelta');
-                outlier = B_ols(j,:) < obj.prior.Bmin;
-                B_ols(j, filter & outlier') = obj.prior.Bmin * (1+0.1*rand());
-                B_ols(filter, j) = B_ols(j, filter);
-                B_ols(j, j) = -sum(B_ols(j, :));
-            end
+%                 if obj.caseName == 'case123_R'
+%                     Topo = ~obj.topoPrior;
+%                 end
 
-            obj.dataE.G = G_ols;
-            obj.dataE.B = B_ols;
+                T = obj.data.G~=0;
+
+                % approximate the parameter
+                
+                G_ols = zeros(obj.numBus, obj.numBus);
+                B_ols = zeros(obj.numBus, obj.numBus);
+                for i = 1:obj.numBus
+                    j = VmOrder(i);
+                    filter = Topo(:, j);
+                    filter(j) = false;
+                    previous = VmOrder(1:i);
+                    previous = intersect(previous, find(filter));
+
+                    VmDelta = Vm(filter, :) - repmat(Vm(j, :), sum(filter), 1);
+                    yG = IP(i, :);
+                    yB = IQ(i, :);
+                    try
+                        yG = yG - G_ols(previous, j)' * VmDelta(filter(previous), :);
+                        yB = yB + B_ols(previous, j)' * VmDelta(filter(previous), :);
+                    catch
+                        assert (i == 1);
+                    end
+
+                    rng(i);
+                    filter(previous) = false;
+                    VmDelta = Vm(filter, :) - repmat(Vm(j, :), sum(filter), 1);
+    %                 G_ols(j, filter) = obj.tls(VmDelta', yG');
+                    G_ols(j, filter) = yG * VmDelta' / (VmDelta * VmDelta');
+                    outlier = G_ols(j,:) > -obj.prior.Gmin;
+                    G_ols(j, filter & outlier') = - obj.prior.Gmin * (1+0.1*rand());
+                    outlier = G_ols(j,:) < -obj.prior.Gmax;
+                    G_ols(j, filter & outlier') = - obj.prior.Gmax * (1+0.1*rand());
+                    G_ols(filter, j) = G_ols(j, filter);
+                    G_ols(j, j) = -sum(G_ols(j, :));
+
+                    B_ols(j, filter) = - yB * VmDelta' / (VmDelta * VmDelta');
+                    outlier = B_ols(j,:) < obj.prior.Bmin;
+                    B_ols(j, filter & outlier') = obj.prior.Bmin * (1+0.1*rand());
+                    outlier = B_ols(j,:) > obj.prior.Bmax;
+                    B_ols(j, filter & outlier') = obj.prior.Bmax * (1+0.1*rand());
+                    B_ols(filter, j) = B_ols(j, filter);
+                    B_ols(j, j) = -sum(B_ols(j, :));
+                end
+
+                obj.dataE.G = G_ols;
+                obj.dataE.B = B_ols;
+            end
             
             
 %             obj.dataE.G = (G+G')/2;
@@ -1333,6 +1349,9 @@ classdef caseDistributionSystemMeasure < caseDistributionSystem
 %             obj.ratioMaxMax = 1e4;
 %             obj.ratioMaxMin = 1e4;
             obj.lambdaCompen = 1e4; % the additional compensate when second order is too large 1e2
+            if obj.caseName == 'case123_R'
+                
+            end
             
             obj.isLHinv = true;
             obj.isLBFGS = false;
@@ -1360,7 +1379,7 @@ classdef caseDistributionSystemMeasure < caseDistributionSystem
             obj.updateLast = 0;
             obj.updateLastLoss = 1e2;       % times the lossMin
             
-            obj.maxIter = 500;
+            obj.maxIter = 5000;
             obj.thsTopo = 0.05;
             obj.Topo = ~obj.topoPrior;
             obj.Tvec = logical(obj.matOfColDE(obj.Topo));
@@ -1745,7 +1764,7 @@ classdef caseDistributionSystemMeasure < caseDistributionSystem
             % This method calculate the d = H\g in a memory saving manner
             % We firstly divide the matrix
 %             profile on
-            deltaTrue = (obj.M * obj.M') \ obj.gradOrigin;
+%             deltaTrue = (obj.M * obj.M') \ obj.gradOrigin;
             
             % split the matrices
             numMea = size(obj.M, 2);
@@ -1767,9 +1786,7 @@ classdef caseDistributionSystemMeasure < caseDistributionSystem
                 B = full(obj.M{1} * obj.M{i+1}');
                 BC = B*invC{i};
                 BCBCell{i} = BC*B';
-                if rem(i, 2) == 0
-                    BCB = BCB + 2*BC*B';
-
+                BCB = BCB + BC*B';
                 BCg = BCg + BC*gradSplit{i+1};
             end
             deltaGB = (A - BCB) \ (gradSplit{1} - BCg);

@@ -5,16 +5,16 @@
 %% We set some hyper parameters
 clear;clc;
 warning off
-caseName = 'case141';     % the case name    'case3_dist' 'case33bw'  'case141'
+caseName = 'case123_R';     % the case name    'case3_dist' 'case33bw'  'case123_R'
 numSnap = 200;             % the number of snapshot
 range.P = 1.2;               % the deviation range of active load 0.6
 range.Q = 0.3;             % the deviation range of reactive load to active load 0.2
 
 % the accuracy of measurement device
-ratio.P = 0.001;%0.005
-ratio.Q = 0.001;
-ratio.Vm = 0.001;%0.00001  0.00000001
-ratio.Va = 0.001;%0.000005
+ratio.P = 0.0001;%0.005
+ratio.Q = 0.0001;
+ratio.Vm = 0.0001;%0.00001  0.00000001
+ratio.Va = 0.0001;%0.000005
 
 % if we use the sparse option
 sparseOption = true;
@@ -27,9 +27,18 @@ switch caseName
     case 'case33bw'
         prior.Gmin = 0.3;
         prior.Bmin = 0.3;
+        prior.Gmax = 500;
+        prior.Bmax = 500;
+    case 'case123_R'
+        prior.Gmin = 3;
+        prior.Bmin = 3;
+        prior.Gmax = 500;
+        prior.Bmax = 500;
     otherwise
         prior.Gmin = 0.1;
         prior.Bmin = 0.1;
+        prior.Gmax = 1000;
+        prior.Bmax = 1000;
 end
 
 % % the delta value of FIM matrix
@@ -65,9 +74,9 @@ caseDS = caseDS.genOperateData;
 caseDS = caseDS.setAccuracy(ratio);
 caseDS = caseDS.setTopo;
 % profile on
-% caseDS = caseDS.buildFIM;
+caseDS = caseDS.buildFIM;
 % caseDS = caseDS.calBound(caseDS.topoPrior);
-% caseDS = caseDS.updateTopo(caseDS.topoPrior);
+caseDS = caseDS.updateTopo(caseDS.topoPrior);
 % profile off
 % profile viewer
 % caseDS = caseDS.iterateY;
