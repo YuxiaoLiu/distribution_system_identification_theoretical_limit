@@ -1383,11 +1383,15 @@ classdef caseDistributionSystemMeasure < caseDistributionSystem
             obj.numGrad.del = obj.numFIM.del; % the number of branches that should be disconnected
             obj.vmvaWeight = 1;
             
-            if obj.caseName == 'case123_R'
-                obj.lambdaMax = 1e2;
+            if strcmp(obj.caseName, 'case123_R')
+                obj.lambda = 1e3; % the proportion of first order gradient
+                obj.lambdaMin = 1e-1;
+                obj.lambdaMax = 1e3;
+                obj.regretRatio = 1.2;
                 obj.maxIter = 5000;
                 obj.deRatio = 1.1;
                 obj.inRatio = 2;
+                obj.ratioMaxConst = 1e4;
             end
             
             obj.momentRatio = 0.9;
@@ -1625,11 +1629,14 @@ classdef caseDistributionSystemMeasure < caseDistributionSystem
                     
                 if ratio > obj.lambda * obj.ratioMax % first order mode
 %                     obj.lambda = obj.lambdaCompen * ratio / obj.ratioMax;
+                    disp('first order mode')
                     obj.isBoundChain(obj.iter) = true;
                     obj.isSecond = false;
+                    obj.lambda = min(obj.lambda * obj.inRatio, obj.lambdaMax);
                     
                     delta = delta1;
                 else % second order mode
+                    disp('second order mode')
                     obj.isSecond = true;
 %                     delta = delta2;
                     delta = delta1 * obj.lambda/(1+obj.lambda) + delta2 * 1/(1+obj.lambda);
@@ -1637,6 +1644,7 @@ classdef caseDistributionSystemMeasure < caseDistributionSystem
             else % the regret mode
 %                 ratio = maxD2 / maxD1;
 %                 obj.lambda = obj.lambdaCompen * ratio / obj.ratioMax;
+                disp('regret mode')
                 obj.isBoundChain(obj.iter) = true;
                 
                 delta = obj.step * obj.grad(id);

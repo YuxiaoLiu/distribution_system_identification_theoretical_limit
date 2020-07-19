@@ -32,8 +32,8 @@ switch caseName
     case 'case123_R'
         prior.Gmin = 3;
         prior.Bmin = 3;
-        prior.Gmax = 500;
-        prior.Bmax = 500;
+        prior.Gmax = 200;
+        prior.Bmax = 200;
     otherwise
         prior.Gmin = 0.1;
         prior.Bmin = 0.1;

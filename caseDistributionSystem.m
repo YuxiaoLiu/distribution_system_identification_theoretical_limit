@@ -150,7 +150,7 @@ classdef caseDistributionSystem < handle
                 mpcThis = obj.mpc;
                 % update active and reactive load
                 mpcThis.bus(2:end,3) = mpcThis.bus(2:end,3) .* obj.loadP(:, i);
-                if obj.caseName == 'case123_R'
+                if strcmp(obj.caseName, 'case123_R')
                     mpcThis.bus(2:end,4) = mpcThis.bus(2:end,4) .* obj.loadQ(:, i) * 2;
                 else
                     mpcThis.bus(2:end,4) = mpcThis.bus(2:end,4) .* obj.loadQ(:, i);
