@@ -296,8 +296,9 @@ mpc.branch = [
 %Vbase = mpc.bus(1, BASE_KV) * 1e3;      %% in Volts
 %Sbase = mpc.baseMVA * 1e6;              %% in VA
 mpc.branch(:, [BR_R BR_X]) = mpc.branch(:, [BR_R BR_X])*100;
+mpc.branch(:, BR_B) = 0;
 
 %% convert loads from kW to MW
 mpc.bus(:, [PD, QD]) = mpc.bus(:, [PD, QD]);
-mpc.gen(:,[2,3,4,5]) =mpc.gen(:,[2,3,4,5]);
+mpc.gen(:,[2,3,4,5]) = mpc.gen(:,[2,3,4,5]);
 

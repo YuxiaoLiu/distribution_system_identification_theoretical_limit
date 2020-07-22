@@ -115,6 +115,10 @@ classdef caseDistributionSystemMeasure < caseDistributionSystem
         rhoChain            % the Chain of rho_k = 1/(y_k^T * s_k)
         
         isLHinv             % whether we use the low memory version to get the inverse
+        
+        ls_c                % the c value of line search c*alpha*g'*d
+        ls_alpha            % the alpha ratio of line search c*alpha*g'*d
+        ls_maxTry           % the maximum try numbers of the line search
     end
     
     methods
@@ -483,6 +487,7 @@ classdef caseDistributionSystemMeasure < caseDistributionSystem
             end
             
             obj.boundA.total = sqrt(var);
+            obj.boundA.total(obj.boundA.total>obj.prior.Gmax) = obj.prior.Gmax;
 %             obj.boundA.cov = cov;
             
             boundG = zeros(obj.numFIM.G, 1);
@@ -620,9 +625,9 @@ classdef caseDistributionSystemMeasure < caseDistributionSystem
 
                     B_ols(j, filter) = - yB * VmDelta' / (VmDelta * VmDelta');
                     outlier = B_ols(j,:) < obj.prior.Bmin;
-                    B_ols(j, filter & outlier') = obj.prior.Bmin * (1+0.1*rand());
+                    B_ols(j, filter & outlier') = obj.prior.Bmin;% * (1+0.1*rand());
                     outlier = B_ols(j,:) > obj.prior.Bmax;
-                    B_ols(j, filter & outlier') = obj.prior.Bmax * (1+0.1*rand());
+                    B_ols(j, filter & outlier') = obj.prior.Bmax;% * (1+0.1*rand());
                     B_ols(filter, j) = B_ols(j, filter);
                     B_ols(j, j) = -sum(B_ols(j, :));
                 end
@@ -1469,14 +1474,15 @@ classdef caseDistributionSystemMeasure < caseDistributionSystem
                     continue;
                 end
 %                 profile on;
-                % do the pseudo PF
-                if ~all(obj.isMeasure.Va(2:end)) ...
-                        && ~obj.isFirst && obj.iter > 1 ...
-                        && log10(obj.loss.total / obj.lossMin) < obj.startPF% We do not calculate the PF for the regret mode
-%                     obj = updateParPF(obj);
-                end
+%                 % do the pseudo PF
+%                 if ~all(obj.isMeasure.Va(2:end)) ...
+%                         && ~obj.isFirst && obj.iter > 1 ...
+%                         && log10(obj.loss.total / obj.lossMin) < obj.startPF% We do not calculate the PF for the regret mode
+% %                     obj = updateParPF(obj);
+%                 end
                 % collect the parameter vector
                 obj = collectPar(obj);
+%                 lossTest = getLoss(obj);
                 % build the Hessian
                 obj = buildMeasure(obj);
                 obj.lossChain(:, obj.iter) = ...
@@ -1501,34 +1507,276 @@ classdef caseDistributionSystemMeasure < caseDistributionSystem
             
         end
         
+        function obj = identifyLineSearch(obj)
+            % This method implement the line search
+            % We may use simply the second order, or the combination of
+            % first order and second order
+            obj.ls_c = 1e-2;
+            obj.ls_alpha = 5;
+            obj.ls_maxTry = 20;
+            obj.boundA = obj.bound;
+            
+            obj.isLHinv = true;
+            obj.isLBFGS = false;
+            obj.maxIter = 2000;
+            obj.thsTopo = 0.05;
+            obj.Topo = ~obj.topoPrior;
+            obj.Tvec = logical(obj.matOfColDE(obj.Topo));
+            obj.numGrad.del = obj.numFIM.del; % the number of branches that should be disconnected
+            obj.vmvaWeight = 1;
+            obj.updateLastLoss = 1e2;       % times the lossMin
+            
+            % we first initialize the data
+            obj.dataO.G = obj.dataE.G;
+            obj.dataO.B = obj.dataE.B;
+            
+            obj.dataO.Vm = obj.data.Vm;
+%             obj.dataO.Va = obj.data.Va;
+            obj.dataO.Vm(2:end, :) = bsxfun(@times, obj.data.Vm_noised(2:end, :), obj.isMeasure.Vm(2:end));
+            obj.dataO.Vm(obj.dataO.Vm == 0) = 1;
+%             obj.dataO.Va = bsxfun(@times, obj.data.Va_noised, obj.isMeasure.Va);
+            obj.dataO.P = obj.data.P_noised;
+            obj.dataO.Q = obj.data.Q_noised;
+            obj.dataO.Va = zeros(obj.numBus, obj.numSnap);
+            obj = updateParPF(obj);
+            obj.dataO.Va(obj.isMeasure.Va, :) = obj.data.Va_noised(obj.isMeasure.Va, :);
+            
+            % initialize the gradient numbers
+            obj.numGrad.G = (obj.numBus - 1) * obj.numBus / 2; % exclude the diagonal elements
+            obj.numGrad.B = (obj.numBus - 1) * obj.numBus / 2;
+            obj.numGrad.Vm = obj.numSnap * (obj.numBus - 1); % exclude the source bus
+            obj.numGrad.Va = obj.numSnap * (obj.numBus - 1);
+            obj.numGrad.Sum = obj.numGrad.G + obj.numGrad.B + obj.numGrad.Vm + obj.numGrad.Va;
+            
+            % evaluate the minimum loss
+            obj.updateLastLoss = 1e2;       % times the lossMin
+            obj = evaluateLossMin(obj);
+            obj.updateLastLoss = obj.updateLastLoss * obj.lossMin;
+            
+            obj.updateStart = 10;           % the start iteration number to update the topology
+            obj.updateStep = 3;             % the number of steps we calculate the judge whether stop iteration
+            obj.updateRatio = 1e-2;         % the long term ratio and the short term ratio to stop iteration
+            obj.updateRatioLast = 1e-3;     % the last topology update ratio
+            obj.updateLast = 0;
+            obj.maxD2Upper = 100;
+            
+            obj.momentRatio = 0.9;
+            obj.momentRatioMax = 0.9;
+            obj.tuneGrad = false;
+            
+            % begin the iteration loop
+            obj.iter = 1;
+            obj.lossChain = zeros(5, obj.maxIter);
+            obj.parChain = zeros(obj.numGrad.Sum, obj.maxIter);
+            obj.isConverge = 0;
+            
+            while (obj.iter <= obj.maxIter && obj.isConverge <= 2)
+                disp(obj.iter);
+                % whether to stop iteration and update the topology
+                if ((obj.iter > obj.updateStart + obj.updateLast ...
+                        && mean(obj.lossChain(1, obj.iter-3*obj.updateStep:obj.iter-2*obj.updateStep)) ...
+                        / mean(obj.lossChain(1, obj.iter-2*obj.updateStep:obj.iter-obj.updateStep)) ...
+                        < (1 + obj.updateRatio)...
+                        && obj.lossChain(1, obj.iter-2) / obj.lossChain(1, obj.iter-1) ...
+                        < (1 + obj.updateRatio)...
+                        && obj.lossChain(1, obj.iter-1) < obj.updateLastLoss))...
+                        || (obj.iter > 1 + obj.updateLast && obj.loss.total < obj.lossMin)...
+                        || ((obj.iter > 31 + obj.updateLast) ...
+                        && all(diff(obj.lossChain(1, obj.iter-30:obj.iter-1))>0))
+                    obj = updateTopoIter(obj);
+                    continue;
+                end
+                % collect the parameter vector
+                obj = collectPar(obj);
+                % build the Hessian
+                obj = buildMeasure(obj);
+                obj.lossChain(:, obj.iter) = ...
+                    [obj.loss.total; obj.loss.P; obj.loss.Q; ...
+                    obj.loss.Vm; obj.loss.Va];
+                disp(obj.loss.total/1e10);  
+                % implement the re-weight techique.
+                obj = tuneGradient(obj);
+                % update the parameters
+                obj = updateParLineSearch(obj);
+                obj.iter = obj.iter + 1;
+            end
+            obj.lossChain(:, obj.iter+1:end) = [];
+            obj.parChain(:, obj.iter+1:end) = [];
+        end
+        
+        function obj = updateParLineSearch(obj)
+            % This method updates the parameters using the line search
+            % strategies
+            
+            id_GB = [obj.Tvec; obj.Tvec];
+            id = [id_GB; true(obj.numGrad.Vm+obj.numGrad.Va, 1)];
+            
+            % get the first and second order delta
+            if obj.iter > 1 + obj.updateLast
+                moment = obj.gradPast * obj.momentRatio + obj.grad * (1-obj.momentRatio);
+            else
+                moment = obj.grad;
+            end
+            obj.gradPast = moment;
+            delta1 = moment(id);
+            if ~obj.isLHinv
+                delta2 = obj.H(id, id) \ obj.gradOrigin(id);
+            else
+                [obj, delta2] = calLHInv(obj, id);
+            end
+            % correct the large value of delta2
+%             delta2(delta2 > obj.prior.Gmax) = obj.prior.Gmax;
+%             delta2(delta2 < -obj.prior.Gmax) = -obj.prior.Gmax;
+            maxD2 = max(abs(delta2));
+            % do the line search of first order
+            for i = -5:1:obj.ls_maxTry
+                alpha = 1/(obj.ls_alpha^i);
+                delta = alpha * delta1;
+                % try the current delta and update the parameters
+                par = zeros(obj.numGrad.Sum, 1);
+                par(id) = obj.parChain(id, obj.iter) - delta;
+                G = par(1:obj.numGrad.G);
+                B = par(1+obj.numGrad.G:obj.numGrad.G+obj.numGrad.B);
+%                 outlier = G > 0;
+%                 G(outlier & obj.Tvec) = 0;
+%                 outlier = B < 0;
+%                 B(outlier & obj.Tvec) = 0;
+                obj.dataO.G = obj.colToMatDE(G, obj.numBus);
+                obj.dataO.B = obj.colToMatDE(B, obj.numBus);
+                VmVa = reshape(par(1+obj.numGrad.G+obj.numGrad.B:end), 2*(obj.numBus-1), obj.numSnap);
+                obj.dataO.Vm(2:end, :) = VmVa(1:obj.numBus-1, :);
+                obj.dataO.Va(2:end, :) = VmVa(obj.numBus:end, :);
+                lossTry = getLoss(obj);
+                thresDelta = obj.ls_c * obj.gradOrigin(id)' * delta;
+                if obj.loss.total - lossTry > thresDelta
+                    fprintf('The first order delta try number is %d.\n', i);
+                    break
+                end
+            end
+            delta1 = delta;
+%             delta1 = delta1 * 0;
+%             alpha1 = alpha;
+            for i = -5:1:obj.ls_maxTry
+                lambdaLS = obj.ls_alpha^i;
+                d2 = delta2 * 1/(1+lambdaLS);
+                idSmall = abs(d2) < 1;
+                d2(idSmall) = d2(idSmall) / sqrt(1/(1+lambdaLS));
+                delta = delta1 * lambdaLS/(1+lambdaLS) + d2;
+%                 delta = alpha * delta2;
+                % try the current delta and update the parameters
+                par = zeros(obj.numGrad.Sum, 1);
+                par(id) = obj.parChain(id, obj.iter) - delta;
+                G = par(1:obj.numGrad.G);
+                B = par(1+obj.numGrad.G:obj.numGrad.G+obj.numGrad.B);
+%                 outlier = G > 0;
+%                 G(outlier & obj.Tvec) = 0;
+%                 outlier = B < 0;
+%                 B(outlier & obj.Tvec) = 0;
+                obj.dataO.G = obj.colToMatDE(G, obj.numBus);
+                obj.dataO.B = obj.colToMatDE(B, obj.numBus);
+                VmVa = reshape(par(1+obj.numGrad.G+obj.numGrad.B:end), 2*(obj.numBus-1), obj.numSnap);
+                obj.dataO.Vm(2:end, :) = VmVa(1:obj.numBus-1, :);
+                obj.dataO.Va(2:end, :) = VmVa(obj.numBus:end, :);
+                lossTry = getLoss(obj);
+                thresDelta = obj.ls_c * obj.gradOrigin(id)' * delta;
+                if obj.loss.total - lossTry > thresDelta
+                    fprintf('The second order delta try number is %d.\n', i);
+                    break
+                end
+            end
+            % do the line search of second order
+%             for i = -5:1:obj.ls_maxTry
+%                 lambdaLS = obj.ls_alpha^i;
+% %                 alpha = 1/(obj.ls_alpha^i);
+% %                 alpha = sqrt(alpha1^2+alpha^2);
+%                 delta = delta1 * lambdaLS/(1+lambdaLS) + delta2 * 1/(1+lambdaLS);
+% %                 delta = alpha * delta2;
+%                 % try the current delta and update the parameters
+%                 par = zeros(obj.numGrad.Sum, 1);
+%                 par(id) = obj.parChain(id, obj.iter) - delta;
+%                 G = par(1:obj.numGrad.G);
+%                 B = par(1+obj.numGrad.G:obj.numGrad.G+obj.numGrad.B);
+%                 outlier = G > 0;
+%                 G(outlier & obj.Tvec) = 0;
+%                 outlier = B < 0;
+%                 B(outlier & obj.Tvec) = 0;
+%                 obj.dataO.G = obj.colToMatDE(G, obj.numBus);
+%                 obj.dataO.B = obj.colToMatDE(B, obj.numBus);
+%                 VmVa = reshape(par(1+obj.numGrad.G+obj.numGrad.B:end), 2*(obj.numBus-1), obj.numSnap);
+%                 obj.dataO.Vm(2:end, :) = VmVa(1:obj.numBus-1, :);
+%                 obj.dataO.Va(2:end, :) = VmVa(obj.numBus:end, :);
+%                 lossTry = getLoss(obj);
+%                 thresDelta = obj.ls_c * obj.gradOrigin(id)' * delta;
+%                 if obj.loss.total - lossTry > thresDelta
+%                     fprintf('The second order delta try number is %d.\n', i);
+%                     break
+%                 end
+%             end
+            % adjust vaPseudoWeight
+            if obj.iter > 1 + obj.updateLast && maxD2 > obj.maxD2Upper
+                obj.vaPseudoWeight = 1;
+            elseif mod(obj.iter, obj.updateStart) == 0
+                obj.vaPseudoWeight = 100;
+            end
+        end
+        
+        function loss = getLoss(obj)
+            % This method return the loss of the function
+            loss = 0;
+            for i = 1:obj.numSnap
+                % calculate some basic parameters at present state
+                Theta_ij = repmat(obj.dataO.Va(:, i), 1, obj.numBus) - repmat(obj.dataO.Va(:, i)', obj.numBus, 1);
+                % G_ij\cos(\Theta_ij)+B_ij\sin(\Theta_ij)
+                GBThetaP = obj.dataO.G .* cos(Theta_ij) + obj.dataO.B .* sin(Theta_ij);
+                % G_ij\sin(\Theta_ij)-B_ij\cos(\Theta_ij)
+                GBThetaQ = obj.dataO.G .* sin(Theta_ij) - obj.dataO.B .* cos(Theta_ij);
+                % P estimate
+                Pest = (GBThetaP * obj.dataO.Vm(:, i)) .* obj.dataO.Vm(:, i);
+                lossP = sum(((Pest(obj.isMeasure.P) - obj.data.P_noised(obj.isMeasure.P, i)) ./ obj.sigma.P).^2);
+                loss = loss + lossP;
+                % Q estimate
+                Qest = (GBThetaQ * obj.dataO.Vm(:, i)) .* obj.dataO.Vm(:, i);
+                lossQ = sum(((Qest(obj.isMeasure.Q) - obj.data.Q_noised(obj.isMeasure.Q, i)) ./ obj.sigma.Q).^2);
+                loss = loss + lossQ;
+            end
+            lossVm = sum(sum(bsxfun(@rdivide, obj.dataO.Vm(obj.isMeasure.Vm, :) - obj.data.Vm_noised(obj.isMeasure.Vm, :), obj.sigma.Vm(obj.isMeasure.Vm)).^2));
+            loss = loss + lossVm;
+            lossVa = sum(sum(bsxfun(@rdivide, obj.dataO.Va(obj.isMeasure.Va, :) - obj.data.Va_noised(obj.isMeasure.Va, :), obj.sigma.Va(obj.isMeasure.Va)).^2));
+            loss = loss + lossVa;
+        end
+        
         function obj = updateTopoIter(obj)
             % This method update the topology in the iteration process
             
             % We collect the parameter of the last step, because we have
             % the regret strategy
-            obj.iter = obj.iter - 1;
-            par = obj.parChain(:, obj.iter);
-            G = par(1:obj.numGrad.G);
-            B = par(1+obj.numGrad.G:obj.numGrad.G+obj.numGrad.B);
-            obj.dataO.G = obj.colToMatDE(G, obj.numBus);
-            obj.dataO.B = obj.colToMatDE(B, obj.numBus);
-            VmVa = reshape(par(1+obj.numGrad.G+obj.numGrad.B:end), 2*(obj.numBus-1), obj.numSnap);
-            obj.dataO.Vm(2:end, :) = VmVa(1:obj.numBus-1, :);
-            obj.dataO.Va(2:end, :) = VmVa(obj.numBus:end, :);
+%             obj.iter = obj.iter - 1;
+%             par = obj.parChain(:, obj.iter);
+%             G = par(1:obj.numGrad.G);
+%             B = par(1+obj.numGrad.G:obj.numGrad.G+obj.numGrad.B);
+%             obj.dataO.G = obj.colToMatDE(G, obj.numBus);
+%             obj.dataO.B = obj.colToMatDE(B, obj.numBus);
+%             VmVa = reshape(par(1+obj.numGrad.G+obj.numGrad.B:end), 2*(obj.numBus-1), obj.numSnap);
+%             obj.dataO.Vm(2:end, :) = VmVa(1:obj.numBus-1, :);
+%             obj.dataO.Va(2:end, :) = VmVa(obj.numBus:end, :);
             
             % We update the topo
             diagEle = sum(abs(obj.dataO.G)) / 2;
             ratio1 = abs(bsxfun(@rdivide, obj.dataO.G, diagEle));
             ratio2 = abs(bsxfun(@rdivide, obj.dataO.G, diagEle'));
             ratio = max(ratio1, ratio2);
+            ratio = ratio + eye(obj.numBus);
             TopoNext = ratio > obj.thsTopo;
-            numDisconnect = sum(sum(triu(obj.Topo) - triu(TopoNext)));
-            fprintf('We disconnect %d branches\n', numDisconnect);
-            obj.Topo = TopoNext;
-            obj.Tvec = logical(obj.matOfColDE(obj.Topo));
-            obj.dataO.G(~obj.Topo) = 0;
-            obj.dataO.B(~obj.Topo) = 0;
-            
+            if sum(obj.matOfColDE(TopoNext)) >= obj.numBus-1
+                numDisconnect = sum(sum(triu(obj.Topo) - triu(TopoNext)));
+                fprintf('We disconnect %d branches\n', numDisconnect);
+                obj.Topo = TopoNext;
+                obj.Tvec = logical(obj.matOfColDE(obj.Topo));
+                obj.dataO.G(~obj.Topo) = 0;
+                obj.dataO.B(~obj.Topo) = 0;
+            else
+                numDisconnect = 0;
+            end
             % we update some hyper-parameters
             obj.numGrad.del = sum(~obj.Tvec);
             if numDisconnect == 0
@@ -1541,6 +1789,7 @@ classdef caseDistributionSystemMeasure < caseDistributionSystem
             obj.updateLast = obj.iter-1;
             obj.step = obj.stepInit;
             obj.vaPseudoWeight = obj.vaPseudoWeightInit;
+%             obj = updateParPF(obj);
 %             obj.updateLastLoss = obj.lossChain(1, obj.iter);
         end
         
@@ -2176,9 +2425,17 @@ classdef caseDistributionSystemMeasure < caseDistributionSystem
 %                         R(pt) = obj.sigma.Va(j).^(-1);
                         pt = pt + 1;
                     elseif j > 1 % we can add a judgement here
-                        if obj.vaPseudoWeight < 10
-                            obj.M(obj.numGrad.G+obj.numGrad.B+obj.idVa(j-1), pt) ...
-                                = (obj.sigma.Va(j)*obj.vaPseudoWeight).^(-1);
+                        if obj.vaPseudoWeight < 50
+                            if ~obj.isLBFGS
+                                l = 1;
+                                obj.mRow(obj.spt:obj.spt+l-1) = obj.numGrad.G+obj.numGrad.B+obj.idVa(j-1);
+                                obj.mCol(obj.spt:obj.spt+l-1) = pt;
+                                obj.mVal(obj.spt:obj.spt+l-1) = (obj.sigma.Va(j)*obj.vaPseudoWeight).^(-1);
+                                obj.spt = obj.spt + l;
+                            else
+                                obj.M(obj.numGrad.G+obj.numGrad.B+obj.idVa(j-1), pt) ...
+                                    = (obj.sigma.Va(j)*obj.vaPseudoWeight).^(-1);
+                            end
                             pt = pt + 1;
                         end
                     end

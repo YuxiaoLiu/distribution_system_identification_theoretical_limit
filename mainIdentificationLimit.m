@@ -5,7 +5,7 @@
 %% We set some hyper parameters
 clear;clc;
 warning off
-caseName = 'case123_R';     % the case name    'case3_dist' 'case33bw'  'case123_R'
+caseName = 'case123_R';     % the case name    'case3_dist' 'case33bw'  'case123_R' 'case141'
 numSnap = 200;             % the number of snapshot
 range.P = 1.2;               % the deviation range of active load 0.6
 range.Q = 0.3;             % the deviation range of reactive load to active load 0.2
@@ -34,6 +34,11 @@ switch caseName
         prior.Bmin = 3;
         prior.Gmax = 200;
         prior.Bmax = 200;
+    case 'case141'
+        prior.Gmin = 10;
+        prior.Bmin = 10;
+        prior.Gmax = 20000;
+        prior.Bmax = 20000;
     otherwise
         prior.Gmin = 0.1;
         prior.Bmin = 0.1;
@@ -74,6 +79,7 @@ caseDS = caseDS.genOperateData;
 caseDS = caseDS.setAccuracy(ratio);
 caseDS = caseDS.setTopo;
 % profile on
+caseDS.prior = prior;
 caseDS = caseDS.buildFIM;
 % caseDS = caseDS.calBound(caseDS.topoPrior);
 caseDS = caseDS.updateTopo(caseDS.topoPrior);
@@ -90,7 +96,8 @@ caseDS = caseDS.calABound(true, caseDS.topoPrior);
 % caseDS = caseDS.identifyMCMCEIV;
 % caseDS = caseDS.identifyOptNLP;
 % caseDS = caseDS.identifyOptGradient;
-caseDS = caseDS.identifyOptLMPower;
+caseDS = caseDS.identifyLineSearch;
+% caseDS = caseDS.identifyOptLMPower;
 caseDS = caseDS.evalErr;
 % caseDS = caseDS.identifyOptNewton;
 % caseDS = caseDS.buildFIM(k);

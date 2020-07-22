@@ -151,7 +151,7 @@ classdef caseDistributionSystem < handle
                 % update active and reactive load
                 mpcThis.bus(2:end,3) = mpcThis.bus(2:end,3) .* obj.loadP(:, i);
                 if strcmp(obj.caseName, 'case123_R')
-                    mpcThis.bus(2:end,4) = mpcThis.bus(2:end,4) .* obj.loadQ(:, i) * 2;
+                    mpcThis.bus(2:end,4) = mpcThis.bus(2:end,4) .* obj.loadQ(:, i) * 2; %2
                 else
                     mpcThis.bus(2:end,4) = mpcThis.bus(2:end,4) .* obj.loadQ(:, i);
                 end
@@ -222,6 +222,16 @@ classdef caseDistributionSystem < handle
                         obj.topoPrior(idRow(i), idCol(i)) = false;
                         obj.topoPrior(idCol(i), idRow(i)) = false;
                     end
+                otherwise
+                    obj.topoPrior = true(obj.numBus, obj.numBus);
+                    obj.topoPrior(obj.data.G ~= 0) = false;
+                    idBranchOptional = obj.mpc.branch(:, 11) == 0;
+                    idRow = obj.mpc.branch(idBranchOptional, 1);
+                    idCol = obj.mpc.branch(idBranchOptional, 2);
+                    for i = 1:length(idRow)
+                        obj.topoPrior(idRow(i), idCol(i)) = false;
+                        obj.topoPrior(idCol(i), idRow(i)) = false;
+                    end
             end
             
 %             obj.topoPrior = false(obj.numBus, obj.numBus); % do not consider any topology priors
@@ -264,16 +274,19 @@ classdef caseDistributionSystem < handle
             % enlarge ratio of each rows of measurement noise.
 %             obj.sigma.P = max(abs(obj.data.P),[], 2) * ratio.P; %  mean(abs(obj.data.P), 2) * ratio.P;
 %             obj.sigma.Q = max(abs(obj.data.Q),[], 2) * ratio.Q; % mean
-            obj.sigma.P = mean(abs(obj.data.P), 2) * ratio.P; %  mean(abs(obj.data.P), 2) * ratio.P;
-            obj.sigma.Q = mean(abs(obj.data.Q), 2) * ratio.Q; % mean
-            obj.sigma.P = max(obj.sigma.P, ratio.Pmin * obj.sigma.P(1));
-            obj.sigma.Q = max(obj.sigma.Q, ratio.Qmin * obj.sigma.Q(1));
+            isZeroInj = mean(abs(obj.data.P), 2)==0;
+            obj.sigma.P = ones(obj.numBus, 1) * mean(mean(abs(obj.data.P), 2)) * ratio.P * 10; %  mean(abs(obj.data.P), 2) * ratio.P;
+            obj.sigma.Q = ones(obj.numBus, 1) * mean(mean(abs(obj.data.Q), 2)) * ratio.Q * 10; % mean(abs(obj.data.Q), 2) * ratio.Q;
+            obj.sigma.P(isZeroInj) = 0;
+            obj.sigma.Q(isZeroInj) = 0;
+%             obj.sigma.P = max(obj.sigma.P, ratio.Pmin * obj.sigma.P(1));
+%             obj.sigma.Q = max(obj.sigma.Q, ratio.Qmin * obj.sigma.Q(1));
             obj.sigma.Vm = mean(abs(obj.data.Vm), 2) * ratio.Vm;
             obj.sigma.Va = ones(obj.numBus, 1) * pi / 1800  * ratio.Va;
 %             obj.sigma.Va = mean(abs(obj.data.Va), 2) * ratio.Va;
             obj.sigma.Vm(1) = 0;
             obj.sigma.Va(1) = 0;
-            
+
             % we generate the measurement noise
             rng(1000);
             obj.data.P_noise = randn(obj.numBus, obj.numSnap);
@@ -301,6 +314,10 @@ classdef caseDistributionSystem < handle
             obj.data.IQ_noise = obj.data.IQ_noised - obj.data.IQ;
             obj.sigma.IP = std(obj.data.IP_noise, 0, 2);
             obj.sigma.IQ = std(obj.data.IQ_noise, 0, 2);
+            
+            % in case we have some zero injections
+            obj.sigma.P(obj.sigma.P==0) = mean(obj.sigma.P) * 1e-1;
+            obj.sigma.Q(obj.sigma.Q==0) = mean(obj.sigma.Q) * 1e-1;
         end
         
         function obj = buildFIM(obj, varargin)
@@ -712,6 +729,7 @@ classdef caseDistributionSystem < handle
 %                 tol = tol * 1.5;
 %             end
             obj.bound.total = sqrt(var);
+            obj.bound.total(obj.bound.total>obj.prior.Gmax) = obj.prior.Gmax;
             
             boundG = zeros(obj.numFIM.G, 1);
             boundG(obj.numFIM.index(1:obj.numFIM.G)) = obj.bound.total(1:obj.numFIM.G-obj.numFIM.del) / obj.k.G;
