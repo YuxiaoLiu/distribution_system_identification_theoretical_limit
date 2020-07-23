@@ -1514,7 +1514,7 @@ classdef caseDistributionSystemMeasure < caseDistributionSystem
             obj.ls_c = 1e-2;
             obj.ls_alpha = 5;
             obj.ls_maxTry = 20;
-            obj.boundA = obj.bound;
+%             obj.boundA = obj.bound;
             
             obj.isLHinv = true;
             obj.isLBFGS = false;
@@ -1549,16 +1549,21 @@ classdef caseDistributionSystemMeasure < caseDistributionSystem
             obj.numGrad.Sum = obj.numGrad.G + obj.numGrad.B + obj.numGrad.Vm + obj.numGrad.Va;
             
             % evaluate the minimum loss
-            obj.updateLastLoss = 1e2;       % times the lossMin
+            obj.updateLastLoss = 1e3;       % times the lossMin
             obj = evaluateLossMin(obj);
             obj.updateLastLoss = obj.updateLastLoss * obj.lossMin;
             
             obj.updateStart = 10;           % the start iteration number to update the topology
             obj.updateStep = 3;             % the number of steps we calculate the judge whether stop iteration
             obj.updateRatio = 1e-2;         % the long term ratio and the short term ratio to stop iteration
-            obj.updateRatioLast = 1e-3;     % the last topology update ratio
+            obj.updateRatioLast = 1e-5;     % the last topology update ratio
             obj.updateLast = 0;
-            obj.maxD2Upper = 100;
+            switch obj.caseName
+                case 'case33bw'
+                    obj.maxD2Upper = 100;
+                otherwise
+                    obj.maxD2Upper = 1000;
+            end
             
             obj.momentRatio = 0.9;
             obj.momentRatioMax = 0.9;
@@ -1593,7 +1598,12 @@ classdef caseDistributionSystemMeasure < caseDistributionSystem
                 obj.lossChain(:, obj.iter) = ...
                     [obj.loss.total; obj.loss.P; obj.loss.Q; ...
                     obj.loss.Vm; obj.loss.Va];
-                disp(obj.loss.total/1e10);  
+                disp(obj.loss.total/1e10);
+                % update the bound
+                if mod(obj.iter, obj.updateStart*2) == 0
+                    disp('we update the approximated bound');
+                    obj = updateABound(obj);
+                end
                 % implement the re-weight techique.
                 obj = tuneGradient(obj);
                 % update the parameters
@@ -1712,12 +1722,54 @@ classdef caseDistributionSystemMeasure < caseDistributionSystem
 %                     break
 %                 end
 %             end
-            % adjust vaPseudoWeight
-            if obj.iter > 1 + obj.updateLast && maxD2 > obj.maxD2Upper
-                obj.vaPseudoWeight = 1;
-            elseif mod(obj.iter, obj.updateStart) == 0
-                obj.vaPseudoWeight = 100;
+%             % adjust vaPseudoWeight
+%             if obj.iter > 1 + obj.updateLast && maxD2 > obj.maxD2Upper
+%                 obj.vaPseudoWeight = 1;
+%             elseif mod(obj.iter, obj.updateStart) == 0
+%                 obj.vaPseudoWeight = 100;
+%             end
+        end
+        
+        function obj = updateABound(obj)
+            % This method update the approximate bound from the dataO
+            % struct.
+            id_GB = [obj.Tvec; obj.Tvec];
+            id = [id_GB; true(obj.numGrad.Vm+obj.numGrad.Va, 1)];
+            % split the matrices
+            numMea = size(obj.M, 2);
+            numGB = obj.numGrad.G+obj.numGrad.B-2*obj.numGrad.del;
+            idSplit = [numGB ones(1, obj.numSnap)*2*(obj.numBus-1)];
+            M = mat2cell(obj.M(id, :), idSplit, numMea);
+            A = full(M{1}*M{1}');
+            
+            % calculate the value inv(A-B/CB')
+            invC = cellfun(@(m) inv(full(m*m')), M(2:end), 'UniformOutput', false);
+            BCB = zeros(numGB); % B/CB'
+            BCell = cell(obj.numSnap, 1);
+            for i = 1:obj.numSnap
+                B = full(M{1} * M{i+1}');
+                BCell{i} = B;
+                BCB = BCB + B*invC{i}*B';
             end
+            ABCB = inv(A - BCB);
+            varA = diag(ABCB);
+            
+            % calculate the value invC+invC*B'*ABCB*B*invC
+            VCell = cell(obj.numSnap, 1);
+            for i = 1:obj.numSnap
+                add = invC{i}*BCell{i}'*ABCB*BCell{i}*invC{i};
+                VCell{i} = diag(invC{i}) + diag(add);
+            end
+            varV = cell2mat(VCell);
+            var = [varA; varV];
+            obj.boundA.total = sqrt(abs(var));
+            obj.boundA.total(obj.boundA.total>obj.prior.Gmax) = obj.prior.Gmax;
+            
+            obj.boundA.VmVa = reshape(obj.boundA.total(obj.numGrad.G+obj.numGrad.B+1-2*obj.numGrad.del:end), 2*(obj.numBus-1), obj.numSnap);
+            obj.boundA.Vm = reshape(obj.boundA.VmVa(1:obj.numBus-1, :), [], 1) / obj.k.vm;
+            obj.boundA.VmBus = mean(obj.boundA.VmVa(1:obj.numBus-1, :), 2);
+            obj.boundA.Va = reshape(obj.boundA.VmVa(obj.numBus:end, :), [], 1) / obj.k.vm;
+            obj.boundA.VaBus = mean(obj.boundA.VmVa(obj.numBus:end, :), 2);
         end
         
         function loss = getLoss(obj)

@@ -256,7 +256,7 @@ classdef caseDistributionSystem < handle
             obj.isMeasure.P = true(obj.numBus, 1);
             obj.isMeasure.Q = true(obj.numBus, 1);
             obj.isMeasure.Vm = true(obj.numBus, 1);
-            obj.isMeasure.Va = true(obj.numBus, 1); % false
+            obj.isMeasure.Va = false(obj.numBus, 1); % false
             obj.isMeasure.Vm(1) = false;
             obj.isMeasure.Va(1) = false;
 %             obj.isMeasure.Va(3) = false;

@@ -487,6 +487,7 @@ classdef caseDistributionSystemMeasure < caseDistributionSystem
             end
             
             obj.boundA.total = sqrt(var);
+            obj.boundA.total(obj.boundA.total>obj.prior.Gmax) = obj.prior.Gmax;
 %             obj.boundA.cov = cov;
             
             boundG = zeros(obj.numFIM.G, 1);
@@ -1526,8 +1527,8 @@ classdef caseDistributionSystemMeasure < caseDistributionSystem
             obj.updateLastLoss = 1e2;       % times the lossMin
             
             % we first initialize the data
-            obj.dataO.G = obj.data.G;
-            obj.dataO.B = obj.data.B;
+            obj.dataO.G = obj.dataE.G;
+            obj.dataO.B = obj.dataE.B;
             
             obj.dataO.Vm = obj.data.Vm;
 %             obj.dataO.Va = obj.data.Va;
@@ -1592,7 +1593,12 @@ classdef caseDistributionSystemMeasure < caseDistributionSystem
                 obj.lossChain(:, obj.iter) = ...
                     [obj.loss.total; obj.loss.P; obj.loss.Q; ...
                     obj.loss.Vm; obj.loss.Va];
-                disp(obj.loss.total/1e10);  
+                disp(obj.loss.total/1e10);
+                % update the bound
+                if mod(obj.iter, obj.updateStart) == 0
+                    disp('we update the approximated bound');
+                    obj = updateABound(obj);
+                end
                 % implement the re-weight techique.
                 obj = tuneGradient(obj);
                 % update the parameters
@@ -1636,10 +1642,10 @@ classdef caseDistributionSystemMeasure < caseDistributionSystem
                 par(id) = obj.parChain(id, obj.iter) - delta;
                 G = par(1:obj.numGrad.G);
                 B = par(1+obj.numGrad.G:obj.numGrad.G+obj.numGrad.B);
-                outlier = G > 0;
-                G(outlier & obj.Tvec) = 0;
-                outlier = B < 0;
-                B(outlier & obj.Tvec) = 0;
+%                 outlier = G > 0;
+%                 G(outlier & obj.Tvec) = 0;
+%                 outlier = B < 0;
+%                 B(outlier & obj.Tvec) = 0;
                 obj.dataO.G = obj.colToMatDE(G, obj.numBus);
                 obj.dataO.B = obj.colToMatDE(B, obj.numBus);
                 VmVa = reshape(par(1+obj.numGrad.G+obj.numGrad.B:end), 2*(obj.numBus-1), obj.numSnap);
@@ -1659,7 +1665,7 @@ classdef caseDistributionSystemMeasure < caseDistributionSystem
                 lambdaLS = obj.ls_alpha^i;
                 d2 = delta2 * 1/(1+lambdaLS);
                 idSmall = abs(d2) < 1;
-                d2(idSmall) = d2(idSmall) / sqrt();
+                d2(idSmall) = d2(idSmall) / sqrt(1/(1+lambdaLS));
                 delta = delta1 * lambdaLS/(1+lambdaLS) + d2;
 %                 delta = alpha * delta2;
                 % try the current delta and update the parameters
@@ -1667,10 +1673,10 @@ classdef caseDistributionSystemMeasure < caseDistributionSystem
                 par(id) = obj.parChain(id, obj.iter) - delta;
                 G = par(1:obj.numGrad.G);
                 B = par(1+obj.numGrad.G:obj.numGrad.G+obj.numGrad.B);
-                outlier = G > 0;
-                G(outlier & obj.Tvec) = 0;
-                outlier = B < 0;
-                B(outlier & obj.Tvec) = 0;
+%                 outlier = G > 0;
+%                 G(outlier & obj.Tvec) = 0;
+%                 outlier = B < 0;
+%                 B(outlier & obj.Tvec) = 0;
                 obj.dataO.G = obj.colToMatDE(G, obj.numBus);
                 obj.dataO.B = obj.colToMatDE(B, obj.numBus);
                 VmVa = reshape(par(1+obj.numGrad.G+obj.numGrad.B:end), 2*(obj.numBus-1), obj.numSnap);
@@ -1711,11 +1717,41 @@ classdef caseDistributionSystemMeasure < caseDistributionSystem
 %                     break
 %                 end
 %             end
-            % adjust vaPseudoWeight
-            if obj.iter > 1 + obj.updateLast && maxD2 > obj.maxD2Upper
-                obj.vaPseudoWeight = 1;
-            elseif mod(obj.iter, obj.updateStart) == 0
-                obj.vaPseudoWeight = 100;
+%             % adjust vaPseudoWeight
+%             if obj.iter > 1 + obj.updateLast && maxD2 > obj.maxD2Upper
+%                 obj.vaPseudoWeight = 1;
+%             elseif mod(obj.iter, obj.updateStart) == 0
+%                 obj.vaPseudoWeight = 100;
+%             end
+        end
+        
+        function obj = updateABound(obj)
+            % This method update the approximate bound from the dataO
+            % struct.
+            % split the matrices
+            numMea = size(obj.M, 2);
+            numGB = obj.numGrad.G+obj.numGrad.B-2*obj.numGrad.del;
+            idSplit = [numGB ones(1, obj.numSnap)*2*(obj.numBus-1)];
+            obj.M = mat2cell(obj.M(id, :), idSplit, numMea);
+            A = full(obj.M{1}*obj.M{1}');
+            
+            % calculate the value inv(A-B/CB')
+            invC = cellfun(@(m) inv(full(m*m')), obj.M(2:end), 'UniformOutput', false);
+            BCB = zeros(numGB); % B/CB'
+            BCell = cell(obj.numSnap, 1);
+            for i = 1:obj.numSnap
+                B = full(obj.M{1} * obj.M{i+1}');
+                BC = B*invC{i};
+                BCell{i} = B;
+                BCB = BCB + BC*B';
+            end
+            ABCB = inv(A - BCB);
+            varA = diag(ABCB);
+            
+            % calculate the value invC+invC*B'*ABCB*B*invC
+            VCell = cell(obj.numSnap, 1);
+            for i = 1:obj.numSnap
+                invC{i}*
             end
         end
         
@@ -1749,15 +1785,15 @@ classdef caseDistributionSystemMeasure < caseDistributionSystem
             
             % We collect the parameter of the last step, because we have
             % the regret strategy
-            obj.iter = obj.iter - 1;
-            par = obj.parChain(:, obj.iter);
-            G = par(1:obj.numGrad.G);
-            B = par(1+obj.numGrad.G:obj.numGrad.G+obj.numGrad.B);
-            obj.dataO.G = obj.colToMatDE(G, obj.numBus);
-            obj.dataO.B = obj.colToMatDE(B, obj.numBus);
-            VmVa = reshape(par(1+obj.numGrad.G+obj.numGrad.B:end), 2*(obj.numBus-1), obj.numSnap);
-            obj.dataO.Vm(2:end, :) = VmVa(1:obj.numBus-1, :);
-            obj.dataO.Va(2:end, :) = VmVa(obj.numBus:end, :);
+%             obj.iter = obj.iter - 1;
+%             par = obj.parChain(:, obj.iter);
+%             G = par(1:obj.numGrad.G);
+%             B = par(1+obj.numGrad.G:obj.numGrad.G+obj.numGrad.B);
+%             obj.dataO.G = obj.colToMatDE(G, obj.numBus);
+%             obj.dataO.B = obj.colToMatDE(B, obj.numBus);
+%             VmVa = reshape(par(1+obj.numGrad.G+obj.numGrad.B:end), 2*(obj.numBus-1), obj.numSnap);
+%             obj.dataO.Vm(2:end, :) = VmVa(1:obj.numBus-1, :);
+%             obj.dataO.Va(2:end, :) = VmVa(obj.numBus:end, :);
             
             % We update the topo
             diagEle = sum(abs(obj.dataO.G)) / 2;
@@ -1788,7 +1824,7 @@ classdef caseDistributionSystemMeasure < caseDistributionSystem
             obj.updateLast = obj.iter-1;
             obj.step = obj.stepInit;
             obj.vaPseudoWeight = obj.vaPseudoWeightInit;
-            obj = updateParPF(obj);
+%             obj = updateParPF(obj);
 %             obj.updateLastLoss = obj.lossChain(1, obj.iter);
         end
         
