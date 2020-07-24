@@ -115,6 +115,7 @@ classdef caseDistributionSystemMeasure < caseDistributionSystem
         rhoChain            % the Chain of rho_k = 1/(y_k^T * s_k)
         
         isLHinv             % whether we use the low memory version to get the inverse
+        isPHinv             % whether we use the pseudo inverse
         
         ls_c                % the c value of line search c*alpha*g'*d
         ls_alpha            % the alpha ratio of line search c*alpha*g'*d
@@ -1517,6 +1518,7 @@ classdef caseDistributionSystemMeasure < caseDistributionSystem
 %             obj.boundA = obj.bound;
             
             obj.isLHinv = true;
+            obj.isPHinv = true;
             obj.isLBFGS = false;
             obj.maxIter = 2000;
             obj.thsTopo = 0.05;
@@ -1630,14 +1632,18 @@ classdef caseDistributionSystemMeasure < caseDistributionSystem
             obj.gradPast = moment;
             delta1 = moment(id);
             if ~obj.isLHinv
-                delta2 = obj.H(id, id) \ obj.gradOrigin(id);
+                if ~obj.isPHinv
+                    delta2 = obj.H(id, id) \ obj.gradOrigin(id);
+                else
+                    delta2 = lsqminnorm(obj.H(id, id), obj.gradOrigin(id));
+                end
             else
                 [obj, delta2] = calLHInv(obj, id);
             end
             % correct the large value of delta2
 %             delta2(delta2 > obj.prior.Gmax) = obj.prior.Gmax;
 %             delta2(delta2 < -obj.prior.Gmax) = -obj.prior.Gmax;
-            maxD2 = max(abs(delta2));
+%             maxD2 = max(abs(delta2));
             % do the line search of first order
             for i = -5:1:obj.ls_maxTry
                 alpha = 1/(obj.ls_alpha^i);
@@ -2102,7 +2108,16 @@ classdef caseDistributionSystemMeasure < caseDistributionSystem
                 BCB = BCB + BC*B';
                 BCg = BCg + BC*gradSplit{i+1};
             end
-            deltaGB = (A - BCB) \ (gradSplit{1} - BCg);
+            if ~obj.isPHinv
+                deltaGB = (A - BCB) \ (gradSplit{1} - BCg);
+                deltaGBn = deltaGB;
+            else
+                ABCB = A - BCB;
+%                 deltaGB = ABCB \ (gradSplit{1} - BCg);
+                invABCB = pinv(ABCB);
+                deltaGBn = invABCB * (gradSplit{1} - BCg);
+                deltaGB = deltaGBn;
+            end
             
             % calculate the value of x_2 or deltaVmVa
             deltaVmVa = cell(obj.numSnap, 1);
@@ -2112,7 +2127,7 @@ classdef caseDistributionSystemMeasure < caseDistributionSystem
             end
 %             deltaVmVa = cellfun(@(invc, gVmVa, m) invc*(gVmVa-full(m*obj.M{1}')*deltaGB), invC, gradSplit(2:end), obj.M(2:end), 'UniformOutput', false);
             deltaVmVa = cell2mat(deltaVmVa);
-            delta = [deltaGB; deltaVmVa];
+            delta = [deltaGBn; deltaVmVa];
             
 %             profile off;
 %             profile viewer;
