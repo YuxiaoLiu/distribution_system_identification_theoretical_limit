@@ -5,16 +5,16 @@
 %% We set some hyper parameters
 clear;clc;
 warning off
-caseName =  'case123_R';     % the case name    'case3_dist' 'case33bw'  'case123_R' 'case141'
-numSnap = 200;             % the number of snapshot
+caseName =  'case3_dist';     % the case name    'case3_dist' 'case33bw'  'case123_R' 'case141'
+numSnap = 10;             % the number of snapshot
 range.P = 1.2;               % the deviation range of active load 0.6
 range.Q = 0.3;             % the deviation range of reactive load to active load 0.2
 
 % the accuracy of measurement device
 ratio.P = 0.001;%0.005
 ratio.Q = 0.001;
-ratio.Vm = 0.0000001;%0.00001  0.00000001
-ratio.Va = 0.0001;%0.000005
+ratio.Vm = 0.001;%0.00001  0.00000001
+ratio.Va = 0.001;%0.000005
 
 % if we use the sparse option
 sparseOption = true;
@@ -37,8 +37,8 @@ switch caseName
     case 'case141'
         prior.Gmin = 10;
         prior.Bmin = 10;
-        prior.Gmax = 20000;
-        prior.Bmax = 20000;
+        prior.Gmax = 3000;
+        prior.Bmax = 3000;
     otherwise
         prior.Gmin = 0.1;
         prior.Bmin = 0.1;

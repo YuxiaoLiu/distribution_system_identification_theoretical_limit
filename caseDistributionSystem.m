@@ -224,7 +224,7 @@ classdef caseDistributionSystem < handle
                     end
                 otherwise
                     obj.topoPrior = true(obj.numBus, obj.numBus);
-                    obj.topoPrior(obj.data.G ~= 0) = false;
+                    obj.topoPrior(obj.data.B ~= 0) = false;
                     idBranchOptional = obj.mpc.branch(:, 11) == 0;
                     idRow = obj.mpc.branch(idBranchOptional, 1);
                     idCol = obj.mpc.branch(idBranchOptional, 2);
@@ -421,6 +421,7 @@ classdef caseDistributionSystem < handle
             obj.mRow(obj.spt:end) = [];
             obj.mCol(obj.spt:end) = [];
             obj.mVal(obj.spt:end) = [];
+            obj.mVal(isnan(obj.mVal)) = 0;
             Ms = sparse(obj.mRow, obj.mCol, obj.mVal, obj.numFIM.Sum, obj.numMeasure);
 %             Ms = sparse(obj.M);
             obj.FIM = Ms * Ms';
@@ -682,7 +683,7 @@ classdef caseDistributionSystem < handle
                 disp('calculating (A-B/CB)^-1');
                 BCB = obj.cellMulSum(Cell{1,2}, invC22, Cell{1,2});
 
-                ABC = inv(Cell{1,1} - BCB); % inv(A-B/CB')
+                ABC = pinv(Cell{1,1} - BCB); % inv(A-B/CB')
                 diagABC = diag(ABC);
                 % Calculate the diag of C
                 diagC = obj.cellGetDiag(invC22);

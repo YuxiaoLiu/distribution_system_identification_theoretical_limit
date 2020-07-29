@@ -116,6 +116,7 @@ classdef caseDistributionSystemMeasure < caseDistributionSystem
         
         isLHinv             % whether we use the low memory version to get the inverse
         isPHinv             % whether we use the pseudo inverse
+        isIll               % whether it is ill-conditioned
         
         ls_c                % the c value of line search c*alpha*g'*d
         ls_alpha            % the alpha ratio of line search c*alpha*g'*d
@@ -166,7 +167,10 @@ classdef caseDistributionSystemMeasure < caseDistributionSystem
             obj = approximateY(obj);
             
             obj.dataE.Va = zeros(obj.numBus, obj.numSnap);
-            obj.dataE.Va(2:end, :) = - (obj.dataE.G(2:end, 2:end)) \ obj.data.P_noised(2:end, :);
+            obj.dataE.Va(2:end, :) = - pinv(obj.dataE.G(2:end, 2:end)) * obj.data.P_noised(2:end, :);
+            if any(any(isnan(obj.dataE.Va)))
+                obj.dataE.Va = zeros(obj.numBus, obj.numSnap);
+            end
 %             mu = mean(obj.data.Va, 2);
 %             obj.sigmaReal.P = cov(obj.data.P');
 %             obj.sigmaReal.Va = zeros(obj.numBus, obj.numBus);
@@ -277,6 +281,7 @@ classdef caseDistributionSystemMeasure < caseDistributionSystem
             obj.mRow(obj.spt:end) = [];
             obj.mCol(obj.spt:end) = [];
             obj.mVal(obj.spt:end) = [];
+            obj.mVal(isnan(obj.mVal)) = 0;
             Ms = sparse(obj.mRow, obj.mCol, obj.mVal, obj.numFIM.Sum, obj.numMeasure);
 %             Ms = sparse(obj.M);
             obj.A_FIM = Ms * Ms';
@@ -464,7 +469,7 @@ classdef caseDistributionSystemMeasure < caseDistributionSystem
                 disp('calculating (A-B/CB)^-1');
                 BCB = obj.cellMulSum(Cell{1,2}, invC22, Cell{1,2});
                 
-                ABC = inv(Cell{1,1} - BCB); % inv(A-B/CB')
+                ABC = pinv(Cell{1,1} - BCB); % inv(A-B/CB')
                 diagABC = diag(ABC);
                 % Calculate the diag of C
                 diagC = obj.cellGetDiag(invC22);
@@ -621,15 +626,19 @@ classdef caseDistributionSystemMeasure < caseDistributionSystem
                     G_ols(j, filter & outlier') = - obj.prior.Gmin * (1+0.1*rand());
                     outlier = G_ols(j,:) < -obj.prior.Gmax;
                     G_ols(j, filter & outlier') = - obj.prior.Gmax * (1+0.1*rand());
+                    outlier = isnan(G_ols(j,:));
+                    G_ols(j, filter & outlier') = - obj.prior.Gmin * (1+0.1*rand());
                     G_ols(filter, j) = G_ols(j, filter);
                     G_ols(j, j) = -sum(G_ols(j, :));
 
                     B_ols(j, filter) = - yB * VmDelta' / (VmDelta * VmDelta');
                     outlier = B_ols(j,:) < obj.prior.Bmin;
-                    B_ols(j, filter & outlier') = obj.prior.Bmin;% * (1+0.1*rand());
+                    B_ols(j, filter & outlier') = obj.prior.Bmin * (1+0.1*rand());
                     outlier = B_ols(j,:) > obj.prior.Bmax;
-                    B_ols(j, filter & outlier') = obj.prior.Bmax;% * (1+0.1*rand());
+                    B_ols(j, filter & outlier') = obj.prior.Bmax * (1+0.1*rand());
                     B_ols(filter, j) = B_ols(j, filter);
+                    outlier = isnan(B_ols(j,:));
+                    B_ols(j, filter & outlier') = obj.prior.Bmin * (1+0.1*rand());
                     B_ols(j, j) = -sum(B_ols(j, :));
                 end
 
@@ -1519,6 +1528,7 @@ classdef caseDistributionSystemMeasure < caseDistributionSystem
             
             obj.isLHinv = true;
             obj.isPHinv = true;
+            obj.isIll = false;
             obj.isLBFGS = false;
             obj.maxIter = 2000;
             obj.thsTopo = 0.05;
@@ -1672,7 +1682,14 @@ classdef caseDistributionSystemMeasure < caseDistributionSystem
             delta1 = delta;
 %             delta1 = delta1 * 0;
 %             alpha1 = alpha;
-            for i = -5:1:obj.ls_maxTry
+            if obj.isIll
+                delta2(delta2>obj.prior.Gmax) = obj.prior.Gmax;
+                delta2(delta2<-obj.prior.Gmax) = -obj.prior.Gmax;
+                begin = 4;
+            else
+                begin = -5;
+            end
+            for i = begin:1:obj.ls_maxTry
                 lambdaLS = obj.ls_alpha^i;
                 d2 = delta2 * 1/(1+lambdaLS);
                 idSmall = abs(d2) < 1;
@@ -2113,10 +2130,14 @@ classdef caseDistributionSystemMeasure < caseDistributionSystem
                 deltaGBn = deltaGB;
             else
                 ABCB = A - BCB;
-%                 deltaGB = ABCB \ (gradSplit{1} - BCg);
+                obj.isIll = false;
                 invABCB = pinv(ABCB);
                 deltaGBn = invABCB * (gradSplit{1} - BCg);
                 deltaGB = deltaGBn;
+                if max(abs(deltaGB)) > obj.prior.Gmax
+                    disp('the ABCB matrix is ill-conditioned');
+                    obj.isIll = true;
+                end
             end
             
             % calculate the value of x_2 or deltaVmVa
