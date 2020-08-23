@@ -2144,7 +2144,7 @@ classdef caseDistributionSystemMeasure < caseDistributionSystem
             deltaVmVa = cell(obj.numSnap, 1);
             for i = 1:obj.numSnap
                 B = full(obj.M{1} * obj.M{i+1}');
-                deltaVmVa{i} = invC{i}*(gradSplit{i+1}-B'*deltaGB);
+                deltaVmVa{i} = invC{i}*(gradSplit{i+1}-B'*deltaGB); % we do not use the accurate form, can be improved
             end
 %             deltaVmVa = cellfun(@(invc, gVmVa, m) invc*(gVmVa-full(m*obj.M{1}')*deltaGB), invC, gradSplit(2:end), obj.M(2:end), 'UniformOutput', false);
             deltaVmVa = cell2mat(deltaVmVa);

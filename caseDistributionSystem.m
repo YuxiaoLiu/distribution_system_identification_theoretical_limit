@@ -53,6 +53,8 @@ classdef caseDistributionSystem < handle
         idVmVa              % the id of Vm and Va
         idVm                % the id of Vm
         idVa                % the id of Va
+        
+        isAnalyze           % if we analyze the contribution from different measurements
     end
     
     methods
@@ -256,7 +258,7 @@ classdef caseDistributionSystem < handle
             obj.isMeasure.P = true(obj.numBus, 1);
             obj.isMeasure.Q = true(obj.numBus, 1);
             obj.isMeasure.Vm = true(obj.numBus, 1);
-            obj.isMeasure.Va = false(obj.numBus, 1); % false
+            obj.isMeasure.Va = true(obj.numBus, 1); % false
             obj.isMeasure.Vm(1) = false;
             obj.isMeasure.Va(1) = false;
 %             obj.isMeasure.Va(3) = false;
@@ -639,7 +641,7 @@ classdef caseDistributionSystem < handle
         
         function obj = calBound(obj, varargin)
             % this method calculate the bound from the FIM matrix;
-
+            obj.isAnalyze = false; % we analyze the contribution
             if nargin == 3
                 obj.sparseOption = varargin{1};
                 obj.topoPrior = varargin{2};
@@ -683,13 +685,16 @@ classdef caseDistributionSystem < handle
                 disp('calculating (A-B/CB)^-1');
                 BCB = obj.cellMulSum(Cell{1,2}, invC22, Cell{1,2});
 
-                ABC = pinv(Cell{1,1} - BCB); % inv(A-B/CB')
+                ABC = pinv(full(Cell{1,1}) - BCB); % inv(A-B/CB')
                 diagABC = diag(ABC);
                 % Calculate the diag of C
                 diagC = obj.cellGetDiag(invC22);
                 % Calculate the var
                 var = [diagABC; diagC];
-
+                % Analyze the contributions
+                if obj.isAnalyze
+                    obj = analyzeContribution(obj, full(Cell{1,1}), BCB);
+                end
 %                 profile off;
 %                 profile viewer;
             else
@@ -754,6 +759,24 @@ classdef caseDistributionSystem < handle
             obj.bound.VmBus = mean(obj.bound.VmVa(1:obj.numBus-1, :), 2);
             obj.bound.Va = reshape(obj.bound.VmVa(obj.numBus:end, :), [], 1) / obj.k.vm;
             obj.bound.VaBus = mean(obj.bound.VmVa(obj.numBus:end, :), 2);
+        end
+        
+        function obj = analyzeContribution(obj, A, B)
+            % This function analyze the theoretical contribution between
+            % two fisher information matrices A and B, the default is A-B
+            [Va,Da] = eig(A,'nobalance');
+            da = diag(Da);
+            tempA = Va * Da * Va';
+            trA = sum(1./da);
+            [Vb,Db] = eig(B,'nobalance');
+            db = diag(Db);
+            trB = sum(1./db);
+            Vab = Va'*Vb;
+            impact = Vab * Db * Vab';
+            result = Da - impact;
+            
+            [V,D] = eig(A-B,'nobalance');
+            tr = sum(1./diag(D));
         end
         
         function obj = outputBound(obj)
