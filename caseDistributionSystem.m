@@ -195,15 +195,15 @@ classdef caseDistributionSystem < handle
             
             switch obj.caseName
                 case 'case3_dist'
-                    obj.topoPrior = true(obj.numBus, obj.numBus);
-                    obj.topoPrior(obj.data.G ~= 0) = false;
-                    idBranchOptional = obj.mpc.branch(:, 11) == 0;
-                    idRow = obj.mpc.branch(idBranchOptional, 1);
-                    idCol = obj.mpc.branch(idBranchOptional, 2);
-                    for i = 1:length(idRow)
-                        obj.topoPrior(idRow(i), idCol(i)) = false;
-                        obj.topoPrior(idCol(i), idRow(i)) = false;
-                    end
+%                     obj.topoPrior = true(obj.numBus, obj.numBus);
+%                     obj.topoPrior(obj.data.G ~= 0) = false;
+%                     idBranchOptional = obj.mpc.branch(:, 11) == 0;
+%                     idRow = obj.mpc.branch(idBranchOptional, 1);
+%                     idCol = obj.mpc.branch(idBranchOptional, 2);
+%                     for i = 1:length(idRow)
+%                         obj.topoPrior(idRow(i), idCol(i)) = false;
+%                         obj.topoPrior(idCol(i), idRow(i)) = false;
+%                     end
                 case 'case33bw'
                     obj.topoPrior = true(obj.numBus, obj.numBus);
                     obj.topoPrior(obj.data.G ~= 0) = false;
@@ -246,13 +246,18 @@ classdef caseDistributionSystem < handle
             
             % we first set the relative noise ratio, we assume the noise
             % ratio is the sigma/mean value
-            if nargin == 2
+            if nargin == 3
                 ratio = varargin{1};
+                seed = varargin{2};
+            elseif nargin == 2
+                ratio = varargin{1};
+                seed = 0;
             elseif nargin == 1
                 ratio.P = 0.005;
                 ratio.Q = 0.005;
                 ratio.Vm = 0.005; % 0.0000001 0.00001
                 ratio.Va = 0.005;
+                seed = 0;
             end
             % we then configure where are the measurement devices
             obj.isMeasure.P = true(obj.numBus, 1);
@@ -290,16 +295,16 @@ classdef caseDistributionSystem < handle
             obj.sigma.Va(1) = 0;
 
             % we generate the measurement noise
-            rng(1000);
+            rng(seed+1000);
             obj.data.P_noise = randn(obj.numBus, obj.numSnap);
             obj.data.P_noise = bsxfun(@times, obj.data.P_noise, obj.sigma.P);
-            rng(2000);
+            rng(seed+2000);
             obj.data.Q_noise = randn(obj.numBus, obj.numSnap);
             obj.data.Q_noise = bsxfun(@times, obj.data.Q_noise, obj.sigma.Q);
-            rng(3000);
+            rng(seed+3000);
             obj.data.Vm_noise = randn(obj.numBus, obj.numSnap);
             obj.data.Vm_noise = bsxfun(@times, obj.data.Vm_noise, obj.sigma.Vm);
-            rng(4000);
+            rng(seed+4000);
             obj.data.Va_noise = randn(obj.numBus, obj.numSnap);
             obj.data.Va_noise = bsxfun(@times, obj.data.Va_noise, obj.sigma.Va);
             

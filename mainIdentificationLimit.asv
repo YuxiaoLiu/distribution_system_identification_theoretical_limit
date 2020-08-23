@@ -5,8 +5,8 @@
 %% We set some hyper parameters
 clear;clc;
 warning off
-caseName =  'case33bw';     % the case name    'case3_dist' 'case33bw'  'case123_R' 'case141'
-numSnap = 120;             % the number of snapshot
+caseName =  'case3_dist';     % the case name    'case3_dist' 'case33bw'  'case123_R' 'case141'
+numSnap = 20;             % the number of snapshot
 numRun = 50;
 range.P = 1.2;               % the deviation range of active load 0.6
 range.Q = 0.3;             % the deviation range of reactive load to active load 0.2
@@ -81,11 +81,8 @@ caseDS.prior = prior;
 caseDS = caseDS.setAccuracy(ratio);
 caseDS = caseDS.buildFIM;
 caseDS = caseDS.updateTopo(caseDS.topoPrior);
-numBranch = sum(caseDS.mpc.branch(:, 11));
-Error.g = zeros(numBranch, numRun);
-Error.b = zeros(numBranch, numRun);
-Error.topoMiss = zeros(1, numRun);
-Error.topoRedund = zeros(1, numRun);
+Error.g = zeros(caseDS.numBranch, numRun);
+Error.b = zeros(caseDS.numBranch, numRun);
 for seed = 1:numRun
     % set the accuracy of the measurement device, and set whether we have the
     % measurement device of a certain state
@@ -99,10 +96,7 @@ for seed = 1:numRun
     
     caseDS = caseDS.identifyLineSearch;
     caseDS = caseDS.evalErr;
-    Error.g(:, seed) = caseDS.err.g;
-    Error.b(:, seed) = caseDS.err.b;
-    Error.topoMiss(seed) = caseDS.err.topoMiss;
-    Error.topoRedund(seed) = caseDS.err.topoRedund;
+    Error.g(:, see)
 end
 
 %% We evaluate the bound
