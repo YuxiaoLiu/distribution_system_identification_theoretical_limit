@@ -2948,6 +2948,12 @@ classdef caseDistributionSystemMeasure < caseDistributionSystem
             obj.err.B = abs(obj.data.B - obj.dataO.B);
             obj.err.b = obj.err.B(topoBranch);
             
+            % real value of G and B
+            obj.err.gEval = obj.dataO.G(topoBranch);
+            obj.err.gReal = obj.data.G(topoBranch);
+            obj.err.bEval = obj.dataO.B(topoBranch);
+            obj.err.bReal = obj.data.B(topoBranch);
+            
             % error of Vm and Va
             obj.err.Vm = mean(abs(obj.data.Vm(2:end, :) - obj.dataO.Vm(2:end, :)), 2);
             obj.err.Va = mean(abs(obj.data.Va(2:end, :) - obj.dataO.Va(2:end, :)), 2);
