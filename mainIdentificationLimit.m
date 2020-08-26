@@ -91,7 +91,11 @@ Value.b = zeros(numBranch, numRun);
 for seed = 1:numRun
     % set the accuracy of the measurement device, and set whether we have the
     % measurement device of a certain state
+    caseDS = caseDS.setTopo;
     caseDS = caseDS.setAccuracy(ratio, seed);
+    caseDS = caseDS.preEvaluation(prior);
+    caseDS = caseDS.approximateFIM(k);
+    caseDS = caseDS.calABound(true, caseDS.topoPrior);
     
     if seed == 1
         caseDS = caseDS.preEvaluation(prior);

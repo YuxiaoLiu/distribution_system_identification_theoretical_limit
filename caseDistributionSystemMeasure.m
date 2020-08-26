@@ -1291,7 +1291,7 @@ classdef caseDistributionSystemMeasure < caseDistributionSystem
         function obj = identifyOptNewton(obj)
             % This method uses Newton method to update the parameters
             obj.maxIter = 500;
-            obj.thsTopo = 0.01;
+            obj.thsTopo = 0.05;
             obj.Topo = true(obj.numBus, obj.numBus);
             obj.Tvec = logical(obj.matOfColDE(obj.Topo));
             
@@ -1477,7 +1477,7 @@ classdef caseDistributionSystemMeasure < caseDistributionSystem
                         && obj.lossChain(1, obj.iter-2) / obj.lossChain(1, obj.iter-1) ...
                         < (1 + obj.updateRatio)...
                         && obj.lossChain(1, obj.iter-1) < obj.updateLastLoss))...
-                        || (obj.iter > 1 + obj.updateLast && obj.loss.total < obj.lossMin)...
+                        || (obj.iter > 1 + obj.updateLast && obj.loss.total < 0.9*obj.lossMin)...
                         || ((obj.iter > 31 + obj.updateLast) ...
                         && all(diff(obj.lossChain(1, obj.iter-30:obj.iter-1))>0))
                     obj = updateTopoIter(obj);
@@ -1568,7 +1568,7 @@ classdef caseDistributionSystemMeasure < caseDistributionSystem
             obj.updateStart = 10;           % the start iteration number to update the topology
             obj.updateStep = 3;             % the number of steps we calculate the judge whether stop iteration
             obj.updateRatio = 1e-2;         % the long term ratio and the short term ratio to stop iteration
-            obj.updateRatioLast = 1e-5;     % the last topology update ratio
+            obj.updateRatioLast = 1e-3;     % the last topology update ratio
             obj.updateLast = 0;
             switch obj.caseName
                 case 'case33bw'
@@ -1587,7 +1587,7 @@ classdef caseDistributionSystemMeasure < caseDistributionSystem
             obj.parChain = zeros(obj.numGrad.Sum, obj.maxIter);
             obj.isConverge = 0;
             
-            while (obj.iter <= obj.maxIter && obj.isConverge <= 2)
+            while (obj.iter <= obj.maxIter && obj.isConverge <= 2)% 
                 disp(obj.iter);
                 % whether to stop iteration and update the topology
                 if ((obj.iter > obj.updateStart + obj.updateLast ...
@@ -1597,7 +1597,7 @@ classdef caseDistributionSystemMeasure < caseDistributionSystem
                         && obj.lossChain(1, obj.iter-2) / obj.lossChain(1, obj.iter-1) ...
                         < (1 + obj.updateRatio)...
                         && obj.lossChain(1, obj.iter-1) < obj.updateLastLoss))...
-                        || (obj.iter > 1 + obj.updateLast && obj.loss.total < obj.lossMin)...
+                        || (obj.iter > 1 + obj.updateLast && obj.loss.total < obj.lossMin*0.1)...
                         || ((obj.iter > 31 + obj.updateLast) ...
                         && all(diff(obj.lossChain(1, obj.iter-30:obj.iter-1))>0))
                     obj = updateTopoIter(obj);
@@ -1612,10 +1612,10 @@ classdef caseDistributionSystemMeasure < caseDistributionSystem
                     obj.loss.Vm; obj.loss.Va];
                 disp(obj.loss.total/1e10);
                 % update the bound
-                if mod(obj.iter, obj.updateStart*2) == 0
-                    disp('we update the approximated bound');
-                    obj = updateABound(obj);
-                end
+%                 if mod(obj.iter, obj.updateStart*2) == 0
+%                     disp('we update the approximated bound');
+%                     obj = updateABound(obj);
+%                 end
                 % implement the re-weight techique.
                 obj = tuneGradient(obj);
                 % update the parameters
@@ -1685,7 +1685,7 @@ classdef caseDistributionSystemMeasure < caseDistributionSystem
             if obj.isIll
                 delta2(delta2>obj.prior.Gmax) = obj.prior.Gmax;
                 delta2(delta2<-obj.prior.Gmax) = -obj.prior.Gmax;
-                begin = 4;
+                begin = 8;
             else
                 begin = -5;
             end
@@ -1836,12 +1836,28 @@ classdef caseDistributionSystemMeasure < caseDistributionSystem
 %             obj.dataO.Va(2:end, :) = VmVa(obj.numBus:end, :);
             
             % We update the topo
-            diagEle = sum(abs(obj.dataO.G)) / 2;
+%             diagEle = sum(abs(obj.dataO.G)) / 2;
+            diagEle = diag(obj.dataO.G);
+            % due with the minus value
+            for i = 1:obj.numBus
+                if diagEle(i) < 0
+                    diagEle(i) = max(abs(obj.dataO.G(i, :)));
+                end
+            end
+            diagEle(diagEle<0) = 0.1;
             ratio1 = abs(bsxfun(@rdivide, obj.dataO.G, diagEle));
             ratio2 = abs(bsxfun(@rdivide, obj.dataO.G, diagEle'));
             ratio = max(ratio1, ratio2);
             ratio = ratio + eye(obj.numBus);
-            TopoNext = ratio > obj.thsTopo;
+            denseRatio = size(find(obj.dataO.G),1)/(obj.numBus*obj.numBus);
+            if denseRatio > 0.5
+                TopoNext = ratio > (obj.thsTopo/3);
+            elseif denseRatio > 0.3
+                TopoNext = ratio > (obj.thsTopo/2);
+            else
+                TopoNext = ratio > obj.thsTopo*1.5;
+            end
+            
             if sum(obj.matOfColDE(TopoNext)) >= obj.numBus-1
                 numDisconnect = sum(sum(triu(obj.Topo) - triu(TopoNext)));
                 fprintf('We disconnect %d branches\n', numDisconnect);
@@ -2134,7 +2150,7 @@ classdef caseDistributionSystemMeasure < caseDistributionSystem
                 invABCB = pinv(ABCB);
                 deltaGBn = invABCB * (gradSplit{1} - BCg);
                 deltaGB = deltaGBn;
-                if max(abs(deltaGB)) > obj.prior.Gmax
+                if max(abs(deltaGB)) > obj.prior.Gmax/2
                     disp('the ABCB matrix is ill-conditioned');
                     obj.isIll = true;
                 end

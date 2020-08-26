@@ -195,15 +195,15 @@ classdef caseDistributionSystem < handle
             
             switch obj.caseName
                 case 'case3_dist'
-%                     obj.topoPrior = true(obj.numBus, obj.numBus);
-%                     obj.topoPrior(obj.data.G ~= 0) = false;
-%                     idBranchOptional = obj.mpc.branch(:, 11) == 0;
-%                     idRow = obj.mpc.branch(idBranchOptional, 1);
-%                     idCol = obj.mpc.branch(idBranchOptional, 2);
-%                     for i = 1:length(idRow)
-%                         obj.topoPrior(idRow(i), idCol(i)) = false;
-%                         obj.topoPrior(idCol(i), idRow(i)) = false;
-%                     end
+                    obj.topoPrior = true(obj.numBus, obj.numBus);
+                    obj.topoPrior(obj.data.G ~= 0) = false;
+                    idBranchOptional = obj.mpc.branch(:, 11) == 0;
+                    idRow = obj.mpc.branch(idBranchOptional, 1);
+                    idCol = obj.mpc.branch(idBranchOptional, 2);
+                    for i = 1:length(idRow)
+                        obj.topoPrior(idRow(i), idCol(i)) = false;
+                        obj.topoPrior(idCol(i), idRow(i)) = false;
+                    end
                 case 'case33bw'
                     obj.topoPrior = true(obj.numBus, obj.numBus);
                     obj.topoPrior(obj.data.G ~= 0) = false;
@@ -281,13 +281,19 @@ classdef caseDistributionSystem < handle
             % enlarge ratio of each rows of measurement noise.
 %             obj.sigma.P = max(abs(obj.data.P),[], 2) * ratio.P; %  mean(abs(obj.data.P), 2) * ratio.P;
 %             obj.sigma.Q = max(abs(obj.data.Q),[], 2) * ratio.Q; % mean
-            isZeroInj = mean(abs(obj.data.P), 2)==0;
-            obj.sigma.P = ones(obj.numBus, 1) * mean(mean(abs(obj.data.P), 2)) * ratio.P * 10; %  mean(abs(obj.data.P), 2) * ratio.P;
-            obj.sigma.Q = ones(obj.numBus, 1) * mean(mean(abs(obj.data.Q), 2)) * ratio.Q * 10; % mean(abs(obj.data.Q), 2) * ratio.Q;
-            obj.sigma.P(isZeroInj) = 0;
-            obj.sigma.Q(isZeroInj) = 0;
-%             obj.sigma.P = max(obj.sigma.P, ratio.Pmin * obj.sigma.P(1));
-%             obj.sigma.Q = max(obj.sigma.Q, ratio.Qmin * obj.sigma.Q(1));
+            switch obj.caseName
+                case 'case141'
+                    isZeroInj = mean(abs(obj.data.P), 2)==0;
+                    obj.sigma.P = ones(obj.numBus, 1) * mean(mean(abs(obj.data.P), 2)) * ratio.P * 10; %  mean(abs(obj.data.P), 2) * ratio.P;
+                    obj.sigma.Q = ones(obj.numBus, 1) * mean(mean(abs(obj.data.Q), 2)) * ratio.Q * 10; % mean(abs(obj.data.Q), 2) * ratio.Q;
+                    obj.sigma.P(isZeroInj) = 0;
+                    obj.sigma.Q(isZeroInj) = 0;
+                otherwise
+                    obj.sigma.P = mean(abs(obj.data.P), 2) * ratio.P;
+                    obj.sigma.Q = mean(abs(obj.data.Q), 2) * ratio.Q;  
+                    obj.sigma.P = max(obj.sigma.P, ratio.Pmin * obj.sigma.P(1));
+                    obj.sigma.Q = max(obj.sigma.Q, ratio.Qmin * obj.sigma.Q(1));
+            end
             obj.sigma.Vm = mean(abs(obj.data.Vm), 2) * ratio.Vm;
             obj.sigma.Va = ones(obj.numBus, 1) * pi / 1800  * ratio.Va;
 %             obj.sigma.Va = mean(abs(obj.data.Va), 2) * ratio.Va;
