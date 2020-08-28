@@ -1530,7 +1530,7 @@ classdef caseDistributionSystemMeasure < caseDistributionSystem
             obj.isPHinv = true;
             obj.isIll = false;
             obj.isLBFGS = false;
-            obj.maxIter = 10;%2000
+            obj.maxIter = 200;%2000
             obj.thsTopo = 0.05;
             obj.Topo = ~obj.topoPrior;
             obj.Tvec = logical(obj.matOfColDE(obj.Topo));
@@ -1656,84 +1656,83 @@ classdef caseDistributionSystemMeasure < caseDistributionSystem
 %             maxD2 = max(abs(delta2));
 
             % do the line search of first order
-            for i = -5:1:obj.ls_maxTry
-                alpha = 1/(obj.ls_alpha^i);
-                delta = alpha * delta1;
-                % try the current delta and update the parameters
-                par = zeros(obj.numGrad.Sum, 1);
-                par(id) = obj.parChain(id, obj.iter) - delta;
-                G = par(1:obj.numGrad.G);
-                B = par(1+obj.numGrad.G:obj.numGrad.G+obj.numGrad.B);
-%                 outlier = G > 0;
-%                 G(outlier & obj.Tvec) = 0;
-%                 outlier = B < 0;
-%                 B(outlier & obj.Tvec) = 0;
-                obj.dataO.G = obj.colToMatDE(G, obj.numBus);
-                obj.dataO.B = obj.colToMatDE(B, obj.numBus);
-                VmVa = reshape(par(1+obj.numGrad.G+obj.numGrad.B:end), 2*(obj.numBus-1), obj.numSnap);
-                obj.dataO.Vm(2:end, :) = VmVa(1:obj.numBus-1, :);
-                obj.dataO.Va(2:end, :) = VmVa(obj.numBus:end, :);
-                lossTry = getLoss(obj);
-                thresDelta = obj.ls_c * obj.gradOrigin(id)' * delta;
-                if obj.loss.total - lossTry > thresDelta
-                    fprintf('The first order delta try number is %d.\n', i);
-                    break
-                end
-            end
-            delta1 = delta;
-            delta1 = delta1 * 0;
-
-
-            if obj.isIll
-                delta2(delta2>obj.prior.Gmax) = obj.prior.Gmax;
-                delta2(delta2<-obj.prior.Gmax) = -obj.prior.Gmax;
-                begin = 8;
-            else
-                begin = -5;
-            end
-            for i = begin:1:obj.ls_maxTry
-                lambdaLS = obj.ls_alpha^i;
-                d2 = delta2 * 1/(1+lambdaLS);
-                idSmall = abs(d2) < 1;
-                d2(idSmall) = d2(idSmall) / sqrt(1/(1+lambdaLS));
-                delta = delta1 * lambdaLS/(1+lambdaLS) + d2;
-%                 delta = alpha * delta2;
-                % try the current delta and update the parameters
-                par = zeros(obj.numGrad.Sum, 1);
-                par(id) = obj.parChain(id, obj.iter) - delta;
-                G = par(1:obj.numGrad.G);
-                B = par(1+obj.numGrad.G:obj.numGrad.G+obj.numGrad.B);
-%                 outlier = G > 0;
-%                 G(outlier & obj.Tvec) = 0;
-%                 outlier = B < 0;
-%                 B(outlier & obj.Tvec) = 0;
-                obj.dataO.G = obj.colToMatDE(G, obj.numBus);
-                obj.dataO.B = obj.colToMatDE(B, obj.numBus);
-                VmVa = reshape(par(1+obj.numGrad.G+obj.numGrad.B:end), 2*(obj.numBus-1), obj.numSnap);
-                obj.dataO.Vm(2:end, :) = VmVa(1:obj.numBus-1, :);
-                obj.dataO.Va(2:end, :) = VmVa(obj.numBus:end, :);
-                lossTry = getLoss(obj);
-                thresDelta = obj.ls_c * obj.gradOrigin(id)' * delta;
-                if obj.loss.total - lossTry > thresDelta
-                    fprintf('The second order delta try number is %d.\n', i);
-                    break
-                end
-            end
-
-%             delta = delta1;
-%             par = zeros(obj.numGrad.Sum, 1);
-%             par(id) = obj.parChain(id, obj.iter) - delta;
-%             G = par(1:obj.numGrad.G);
-%             B = par(1+obj.numGrad.G:obj.numGrad.G+obj.numGrad.B);
+%             for i = -5:1:obj.ls_maxTry
+%                 alpha = 1/(obj.ls_alpha^i);
+%                 delta = alpha * delta1;
+%                 % try the current delta and update the parameters
+%                 par = zeros(obj.numGrad.Sum, 1);
+%                 par(id) = obj.parChain(id, obj.iter) - delta;
+%                 G = par(1:obj.numGrad.G);
+%                 B = par(1+obj.numGrad.G:obj.numGrad.G+obj.numGrad.B);
 % %                 outlier = G > 0;
 % %                 G(outlier & obj.Tvec) = 0;
 % %                 outlier = B < 0;
 % %                 B(outlier & obj.Tvec) = 0;
-%             obj.dataO.G = obj.colToMatDE(G, obj.numBus);
-%             obj.dataO.B = obj.colToMatDE(B, obj.numBus);
-%             VmVa = reshape(par(1+obj.numGrad.G+obj.numGrad.B:end), 2*(obj.numBus-1), obj.numSnap);
-%             obj.dataO.Vm(2:end, :) = VmVa(1:obj.numBus-1, :);
-%             obj.dataO.Va(2:end, :) = VmVa(obj.numBus:end, :);
+%                 obj.dataO.G = obj.colToMatDE(G, obj.numBus);
+%                 obj.dataO.B = obj.colToMatDE(B, obj.numBus);
+%                 VmVa = reshape(par(1+obj.numGrad.G+obj.numGrad.B:end), 2*(obj.numBus-1), obj.numSnap);
+%                 obj.dataO.Vm(2:end, :) = VmVa(1:obj.numBus-1, :);
+%                 obj.dataO.Va(2:end, :) = VmVa(obj.numBus:end, :);
+%                 lossTry = getLoss(obj);
+%                 thresDelta = obj.ls_c * obj.gradOrigin(id)' * delta;
+%                 if obj.loss.total - lossTry > thresDelta
+%                     fprintf('The first order delta try number is %d.\n', i);
+%                     break
+%                 end
+%             end
+%             delta1 = delta;
+% %             delta1 = delta1 * 0;
+% %             alpha1 = alpha;
+%             if obj.isIll
+%                 delta2(delta2>obj.prior.Gmax) = obj.prior.Gmax;
+%                 delta2(delta2<-obj.prior.Gmax) = -obj.prior.Gmax;
+%                 begin = 8;
+%             else
+%                 begin = -5;
+%             end
+%             for i = begin:1:obj.ls_maxTry
+%                 lambdaLS = obj.ls_alpha^i;
+%                 d2 = delta2 * 1/(1+lambdaLS);
+%                 idSmall = abs(d2) < 1;
+%                 d2(idSmall) = d2(idSmall) / sqrt(1/(1+lambdaLS));
+%                 delta = delta1 * lambdaLS/(1+lambdaLS) + d2;
+% %                 delta = alpha * delta2;
+%                 % try the current delta and update the parameters
+%                 par = zeros(obj.numGrad.Sum, 1);
+%                 par(id) = obj.parChain(id, obj.iter) - delta;
+%                 G = par(1:obj.numGrad.G);
+%                 B = par(1+obj.numGrad.G:obj.numGrad.G+obj.numGrad.B);
+% %                 outlier = G > 0;
+% %                 G(outlier & obj.Tvec) = 0;
+% %                 outlier = B < 0;
+% %                 B(outlier & obj.Tvec) = 0;
+%                 obj.dataO.G = obj.colToMatDE(G, obj.numBus);
+%                 obj.dataO.B = obj.colToMatDE(B, obj.numBus);
+%                 VmVa = reshape(par(1+obj.numGrad.G+obj.numGrad.B:end), 2*(obj.numBus-1), obj.numSnap);
+%                 obj.dataO.Vm(2:end, :) = VmVa(1:obj.numBus-1, :);
+%                 obj.dataO.Va(2:end, :) = VmVa(obj.numBus:end, :);
+%                 lossTry = getLoss(obj);
+%                 thresDelta = obj.ls_c * obj.gradOrigin(id)' * delta;
+%                 if obj.loss.total - lossTry > thresDelta
+%                     fprintf('The second order delta try number is %d.\n', i);
+%                     break
+%                 end
+%             end
+
+            delta = delta2;
+            par = zeros(obj.numGrad.Sum, 1);
+            par(id) = obj.parChain(id, obj.iter) - delta;
+            G = par(1:obj.numGrad.G);
+            B = par(1+obj.numGrad.G:obj.numGrad.G+obj.numGrad.B);
+%                 outlier = G > 0;
+%                 G(outlier & obj.Tvec) = 0;
+%                 outlier = B < 0;
+%                 B(outlier & obj.Tvec) = 0;
+            obj.dataO.G = obj.colToMatDE(G, obj.numBus);
+            obj.dataO.B = obj.colToMatDE(B, obj.numBus);
+            VmVa = reshape(par(1+obj.numGrad.G+obj.numGrad.B:end), 2*(obj.numBus-1), obj.numSnap);
+            obj.dataO.Vm(2:end, :) = VmVa(1:obj.numBus-1, :);
+            obj.dataO.Va(2:end, :) = VmVa(obj.numBus:end, :);
 
         end
         
