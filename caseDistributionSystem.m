@@ -236,7 +236,7 @@ classdef caseDistributionSystem < handle
                     end
             end
             
-%             obj.topoPrior = false(obj.numBus, obj.numBus); % do not consider any topology priors
+            obj.topoPrior = false(obj.numBus, obj.numBus); % do not consider any topology priors
         end
         
         function obj = setAccuracy(obj, varargin)
@@ -288,14 +288,17 @@ classdef caseDistributionSystem < handle
                     obj.sigma.Q = ones(obj.numBus, 1) * mean(mean(abs(obj.data.Q), 2)) * ratio.Q * 10; % mean(abs(obj.data.Q), 2) * ratio.Q;
                     obj.sigma.P(isZeroInj) = 0;
                     obj.sigma.Q(isZeroInj) = 0;
+                    obj.sigma.Vm = mean(abs(obj.data.Vm), 2) * ratio.Vm;
+                    obj.sigma.Va = ones(obj.numBus, 1) * pi / 1800  * ratio.Va;
                 otherwise
                     obj.sigma.P = mean(abs(obj.data.P), 2) * ratio.P;
                     obj.sigma.Q = mean(abs(obj.data.Q), 2) * ratio.Q;  
                     obj.sigma.P = max(obj.sigma.P, ratio.Pmin * obj.sigma.P(1));
                     obj.sigma.Q = max(obj.sigma.Q, ratio.Qmin * obj.sigma.Q(1));
+                    obj.sigma.Vm = mean(abs(obj.data.Vm), 2) * ratio.Vm;
+                    obj.sigma.Va = ones(obj.numBus, 1) * pi / 1800  * ratio.Va;
             end
-            obj.sigma.Vm = mean(abs(obj.data.Vm), 2) * ratio.Vm;
-            obj.sigma.Va = ones(obj.numBus, 1) * pi / 1800  * ratio.Va;
+            
 %             obj.sigma.Va = mean(abs(obj.data.Va), 2) * ratio.Va;
             obj.sigma.Vm(1) = 0;
             obj.sigma.Va(1) = 0;

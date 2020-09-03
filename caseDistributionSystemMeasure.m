@@ -1530,7 +1530,7 @@ classdef caseDistributionSystemMeasure < caseDistributionSystem
             obj.isPHinv = true;
             obj.isIll = false;
             obj.isLBFGS = false;
-            obj.maxIter = 10;%2000
+            obj.maxIter = 4000;%2000
             obj.thsTopo = 0.05;
             obj.Topo = ~obj.topoPrior;
             obj.Tvec = logical(obj.matOfColDE(obj.Topo));
@@ -1552,6 +1552,7 @@ classdef caseDistributionSystemMeasure < caseDistributionSystem
             obj.dataO.Va = zeros(obj.numBus, obj.numSnap);
             obj = updateParPF(obj);
             obj.dataO.Va(obj.isMeasure.Va, :) = obj.data.Va_noised(obj.isMeasure.Va, :);
+            
             
             % initialize the gradient numbers
             obj.numGrad.G = (obj.numBus - 1) * obj.numBus / 2; % exclude the diagonal elements
@@ -1597,9 +1598,10 @@ classdef caseDistributionSystemMeasure < caseDistributionSystem
                         && obj.lossChain(1, obj.iter-2) / obj.lossChain(1, obj.iter-1) ...
                         < (1 + obj.updateRatio)...
                         && obj.lossChain(1, obj.iter-1) < obj.updateLastLoss))...
-                        || (obj.iter > 1 + obj.updateLast && obj.loss.total < obj.lossMin*0.1)...
+                        || (obj.iter > 1 + obj.updateLast && obj.loss.total < obj.lossMin*0.8)...
                         || ((obj.iter > 31 + obj.updateLast) ...
                         && all(diff(obj.lossChain(1, obj.iter-30:obj.iter-1))>0))
+                    obj = updateABound(obj);
                     obj = updateTopoIter(obj);
                     continue;
                 end
@@ -1681,13 +1683,13 @@ classdef caseDistributionSystemMeasure < caseDistributionSystem
                 end
             end
             delta1 = delta;
-            delta1 = delta1 * 0;
+%             delta1 = delta1 * 0;
 
 
             if obj.isIll
                 delta2(delta2>obj.prior.Gmax) = obj.prior.Gmax;
                 delta2(delta2<-obj.prior.Gmax) = -obj.prior.Gmax;
-                begin = 8;
+                begin = 4; % 8 for case33
             else
                 begin = -5;
             end
@@ -1746,7 +1748,8 @@ classdef caseDistributionSystemMeasure < caseDistributionSystem
             numMea = size(obj.M, 2);
             numGB = obj.numGrad.G+obj.numGrad.B-2*obj.numGrad.del;
             idSplit = [numGB ones(1, obj.numSnap)*2*(obj.numBus-1)];
-            M = mat2cell(obj.M(id, :), idSplit, numMea);
+            M = obj.M;
+%             M = mat2cell(obj.M(id, :), idSplit, numMea);
             A = full(M{1}*M{1}');
             
             % calculate the value inv(A-B/CB')
@@ -1771,6 +1774,16 @@ classdef caseDistributionSystemMeasure < caseDistributionSystem
             var = [varA; varV];
             obj.boundA.total = sqrt(abs(var));
             obj.boundA.total(obj.boundA.total>obj.prior.Gmax) = obj.prior.Gmax;
+            
+            boundG = zeros(obj.numGrad.G, 1);
+            boundG(obj.Tvec) = obj.boundA.total(1:obj.numGrad.G-obj.numGrad.del);
+            obj.boundA.G = obj.colToMatDE(boundG, obj.numBus);
+            boundB = zeros(obj.numGrad.B, 1);
+            boundB(obj.Tvec) = obj.boundA.total(1+obj.numGrad.G-obj.numGrad.del:obj.numGrad.G+obj.numGrad.B-2*obj.numGrad.del);
+            obj.boundA.B = obj.colToMatDE(boundB, obj.numBus);
+            
+%             obj.boundA.G(obj.Tvec) = obj.boundA.total(1:obj.numGrad.G-obj.numGrad.del);
+%             obj.boundA.B(obj.Tvec);
             
             obj.boundA.VmVa = reshape(obj.boundA.total(obj.numGrad.G+obj.numGrad.B+1-2*obj.numGrad.del:end), 2*(obj.numBus-1), obj.numSnap);
             obj.boundA.Vm = reshape(obj.boundA.VmVa(1:obj.numBus-1, :), [], 1) / obj.k.vm;
@@ -1820,8 +1833,8 @@ classdef caseDistributionSystemMeasure < caseDistributionSystem
 %             obj.dataO.Va(2:end, :) = VmVa(obj.numBus:end, :);
             
             % We update the topo
-%             diagEle = sum(abs(obj.dataO.G)) / 2;
-            diagEle = diag(obj.dataO.G);
+            diagEle = sum(abs(obj.dataO.G)) / 2;
+%             diagEle = diag(obj.dataO.G);
             % due with the minus value
             for i = 1:obj.numBus
                 if diagEle(i) < 0
@@ -1834,21 +1847,54 @@ classdef caseDistributionSystemMeasure < caseDistributionSystem
             ratio = max(ratio1, ratio2);
             ratio = ratio + eye(obj.numBus);
             denseRatio = size(find(obj.dataO.G),1)/(obj.numBus*obj.numBus);
-            if denseRatio > 0.5
-                TopoNext = ratio > (obj.thsTopo/3);
-            elseif denseRatio > 0.3
-                TopoNext = ratio > (obj.thsTopo/2);
-            else
-                TopoNext = ratio > obj.thsTopo*1.5;
-            end
+            
+%             if denseRatio > 0.5
+%                 TopoNext = ratio > (obj.thsTopo/3);
+%             elseif denseRatio > 0.3
+%                 TopoNext = ratio > (obj.thsTopo/2);
+%             else
+%                 TopoNext = ratio > obj.thsTopo*1.5;
+%             end
+            
+            % we use the bound to help us
+            ratioB1 = abs(bsxfun(@rdivide, obj.boundA.G, diagEle));
+            ratioB2 = abs(bsxfun(@rdivide, obj.boundA.G, diagEle'));
+            ratioB = max(ratioB1, ratioB2);
+            ratioB = ratioB + eye(obj.numBus);
+            
+            TopoNext = ratio > obj.thsTopo | (ratioB >obj.thsTopo);
+            
+%             if denseRatio > 0.5
+% %                 TopoNext = (ratio > (obj.thsTopo/3)) | (ratioB >obj.thsTopo);
+% %             elseif denseRatio > 0.3
+%                 TopoNext = ratio > (obj.thsTopo/2) | (ratioB >obj.thsTopo);
+%             else
+%                 TopoNext = ratio > obj.thsTopo*1.5 | (ratioB >obj.thsTopo);
+%             end
             
             if sum(obj.matOfColDE(TopoNext)) >= obj.numBus-1
                 numDisconnect = sum(sum(triu(obj.Topo) - triu(TopoNext)));
-                fprintf('We disconnect %d branches\n', numDisconnect);
+                TopoMissConnect = sum(sum(~TopoNext & obj.data.G))/2;
+                fprintf('We disconnect %d branches, with %d branches wrong\n', numDisconnect, TopoMissConnect);
                 obj.Topo = TopoNext;
                 obj.Tvec = logical(obj.matOfColDE(obj.Topo));
-                obj.dataO.G(~obj.Topo) = 0;
-                obj.dataO.B(~obj.Topo) = 0;
+                if numDisconnect > 0
+%                     obj.dataO.G = obj.dataE.G;
+%                     obj.dataO.B = obj.dataE.B;
+%                     obj.dataO.G(~obj.Topo) = 0;
+%                     obj.dataO.B(~obj.Topo) = 0;
+                    
+%                     obj.dataO.Vm = obj.data.Vm;
+%         %             obj.dataO.Va = obj.data.Va;
+%                     obj.dataO.Vm(2:end, :) = bsxfun(@times, obj.data.Vm_noised(2:end, :), obj.isMeasure.Vm(2:end));
+%                     obj.dataO.Vm(obj.dataO.Vm == 0) = 1;
+%         %             obj.dataO.Va = bsxfun(@times, obj.data.Va_noised, obj.isMeasure.Va);
+%                     obj.dataO.P = obj.data.P_noised;
+%                     obj.dataO.Q = obj.data.Q_noised;
+%                     obj.dataO.Va = zeros(obj.numBus, obj.numSnap);
+%                     obj = updateParPF(obj);
+%                     obj.dataO.Va(obj.isMeasure.Va, :) = obj.data.Va_noised(obj.isMeasure.Va, :);
+                end
             else
                 numDisconnect = 0;
             end
@@ -2290,6 +2336,7 @@ classdef caseDistributionSystemMeasure < caseDistributionSystem
                 mpcO.bus(:, 8) = obj.dataO.Vm(:, snap);
                 mpcThis = runpf(mpcO, mpopt);
                 obj.dataO.Va(:, snap) = mpcThis.bus(:,9)/180*pi;
+%                 obj.dataO.Vm(:, snap) = mpcThis.bus(:,8);
             end
         end
         
@@ -2474,8 +2521,10 @@ classdef caseDistributionSystemMeasure < caseDistributionSystem
                 GBThetaQ = obj.dataO.G .* sin(Theta_ij) - obj.dataO.B .* cos(Theta_ij);
                 % P estimate
                 Pest = (GBThetaP * obj.dataO.Vm(:, i)) .* obj.dataO.Vm(:, i);
+                obj.dataO.P(:, i) = Pest;
                 % Q estimate
                 Qest = (GBThetaQ * obj.dataO.Vm(:, i)) .* obj.dataO.Vm(:, i);
+                obj.dataO.Q(:, i) = Pest;
                 % the id of Vm and Va
                 obj.idVm = 2*(obj.numBus-1)*(i-1)+1 : 2*(obj.numBus-1)*(i-1)+obj.numBus-1;
                 obj.idVa = 2*(obj.numBus-1)*(i-1)+obj.numBus : 2*(obj.numBus-1)*(i-1)+2*obj.numBus-2;
