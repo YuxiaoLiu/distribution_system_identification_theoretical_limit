@@ -293,8 +293,8 @@ classdef caseDistributionSystem < handle
                 otherwise
                     obj.sigma.P = mean(abs(obj.data.P), 2) * ratio.P;
                     obj.sigma.Q = mean(abs(obj.data.Q), 2) * ratio.Q;  
-                    obj.sigma.P = max(obj.sigma.P, ratio.Pmin * obj.sigma.P(1));
-                    obj.sigma.Q = max(obj.sigma.Q, ratio.Qmin * obj.sigma.Q(1));
+%                     obj.sigma.P = max(obj.sigma.P, ratio.Pmin * obj.sigma.P(1));
+%                     obj.sigma.Q = max(obj.sigma.Q, ratio.Qmin * obj.sigma.Q(1));
                     obj.sigma.Vm = mean(abs(obj.data.Vm), 2) * ratio.Vm;
                     obj.sigma.Va = ones(obj.numBus, 1) * pi / 1800  * ratio.Va;
             end

@@ -1603,7 +1603,7 @@ classdef caseDistributionSystemMeasure < caseDistributionSystem
                         && all(diff(obj.lossChain(1, obj.iter-30:obj.iter-1))>0))
                     obj = updateABound(obj);
                     obj = updateTopoIter(obj);
-                    continue;
+%                     continue;
                 end
                 % collect the parameter vector
                 obj = collectPar(obj);
@@ -1851,9 +1851,9 @@ classdef caseDistributionSystemMeasure < caseDistributionSystem
 %             if denseRatio > 0.5
 %                 TopoNext = ratio > (obj.thsTopo/3);
 %             elseif denseRatio > 0.3
-%                 TopoNext = ratio > (obj.thsTopo/2);
+%                 TopoNext = ratio > (obj.thsTopo/3);
 %             else
-%                 TopoNext = ratio > obj.thsTopo*1.5;
+%                 TopoNext = ratio > obj.thsTopo;
 %             end
             
             % we use the bound to help us
@@ -1861,16 +1861,14 @@ classdef caseDistributionSystemMeasure < caseDistributionSystem
             ratioB2 = abs(bsxfun(@rdivide, obj.boundA.G, diagEle'));
             ratioB = max(ratioB1, ratioB2);
             ratioB = ratioB + eye(obj.numBus);
-            
-            TopoNext = ratio > obj.thsTopo | (ratioB >obj.thsTopo);
-            
-%             if denseRatio > 0.5
-% %                 TopoNext = (ratio > (obj.thsTopo/3)) | (ratioB >obj.thsTopo);
-% %             elseif denseRatio > 0.3
-%                 TopoNext = ratio > (obj.thsTopo/2) | (ratioB >obj.thsTopo);
-%             else
-%                 TopoNext = ratio > obj.thsTopo*1.5 | (ratioB >obj.thsTopo);
-%             end
+                
+            if denseRatio > 0.5
+%                 TopoNext = (ratio > (obj.thsTopo/3)) | (ratioB >obj.thsTopo);
+%             elseif denseRatio > 0.3
+                TopoNext = ratio > (obj.thsTopo/2) | (ratioB >obj.thsTopo);
+            else
+                TopoNext = ratio > obj.thsTopo | (ratioB >obj.thsTopo*1.5);
+            end
             
             if sum(obj.matOfColDE(TopoNext)) >= obj.numBus-1
                 numDisconnect = sum(sum(triu(obj.Topo) - triu(TopoNext)));
@@ -1904,10 +1902,17 @@ classdef caseDistributionSystemMeasure < caseDistributionSystem
                 if obj.updateRatio == obj.updateRatioLast
                     obj.isConverge = 3;
                 else
-                    obj.updateRatio = obj.updateRatioLast;
+                    ratioN = obj.dataO.G>0;
+                    ratioN(logical(eye(size(ratioN)))) = false;
+                    if sum(sum(ratioN)) > 0
+                        obj.dataO.G(ratioN) = obj.dataO.G(ratioN) * 0.8;
+                        obj.dataO.B(ratioN) = obj.dataO.B(ratioN) * 0.8;
+                    else
+                        obj.updateRatio = obj.updateRatioLast;
+                    end
                 end
             end
-            obj.updateLast = obj.iter-1;
+            obj.updateLast = obj.iter;
             obj.step = obj.stepInit;
             obj.vaPseudoWeight = obj.vaPseudoWeightInit;
 %             obj = updateParPF(obj);
