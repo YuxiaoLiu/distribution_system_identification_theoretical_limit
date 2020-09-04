@@ -1666,10 +1666,12 @@ classdef caseDistributionSystemMeasure < caseDistributionSystem
                 par(id) = obj.parChain(id, obj.iter) - delta;
                 G = par(1:obj.numGrad.G);
                 B = par(1+obj.numGrad.G:obj.numGrad.G+obj.numGrad.B);
+                
 %                 outlier = G > 0;
 %                 G(outlier & obj.Tvec) = 0;
 %                 outlier = B < 0;
 %                 B(outlier & obj.Tvec) = 0;
+                
                 obj.dataO.G = obj.colToMatDE(G, obj.numBus);
                 obj.dataO.B = obj.colToMatDE(B, obj.numBus);
                 VmVa = reshape(par(1+obj.numGrad.G+obj.numGrad.B:end), 2*(obj.numBus-1), obj.numSnap);
@@ -1682,6 +1684,8 @@ classdef caseDistributionSystemMeasure < caseDistributionSystem
                     break
                 end
             end
+%             GB = [G(obj.Tvec); B(obj.Tvec)];
+%             delta(id_GB) = obj.parChain(id_GB, obj.iter) - GB;
             delta1 = delta;
 %             delta1 = delta1 * 0;
 
@@ -1705,10 +1709,12 @@ classdef caseDistributionSystemMeasure < caseDistributionSystem
                 par(id) = obj.parChain(id, obj.iter) - delta;
                 G = par(1:obj.numGrad.G);
                 B = par(1+obj.numGrad.G:obj.numGrad.G+obj.numGrad.B);
+                
 %                 outlier = G > 0;
 %                 G(outlier & obj.Tvec) = 0;
 %                 outlier = B < 0;
 %                 B(outlier & obj.Tvec) = 0;
+
                 obj.dataO.G = obj.colToMatDE(G, obj.numBus);
                 obj.dataO.B = obj.colToMatDE(B, obj.numBus);
                 VmVa = reshape(par(1+obj.numGrad.G+obj.numGrad.B:end), 2*(obj.numBus-1), obj.numSnap);
@@ -1865,7 +1871,7 @@ classdef caseDistributionSystemMeasure < caseDistributionSystem
             if denseRatio > 0.5
 %                 TopoNext = (ratio > (obj.thsTopo/3)) | (ratioB >obj.thsTopo);
 %             elseif denseRatio > 0.3
-                TopoNext = ratio > (obj.thsTopo/2) | (ratioB >obj.thsTopo);
+                TopoNext = ratio > (obj.thsTopo/2) | (ratioB >obj.thsTopo/1.2);%原来没有/1.1
             else
                 TopoNext = ratio > obj.thsTopo | (ratioB >obj.thsTopo*1.5);
             end
@@ -1896,6 +1902,10 @@ classdef caseDistributionSystemMeasure < caseDistributionSystem
             else
                 numDisconnect = 0;
             end
+%             ratioN = obj.dataO.G>0;
+%             ratioN(logical(eye(size(ratioN)))) = false;
+%             obj.dataO.G(ratioN) = 0;
+%             obj.dataO.B(ratioN) = 0;
             % we update some hyper-parameters
             obj.numGrad.del = sum(~obj.Tvec);
             if numDisconnect == 0
@@ -1905,7 +1915,29 @@ classdef caseDistributionSystemMeasure < caseDistributionSystem
                     ratioN = obj.dataO.G>0;
                     ratioN(logical(eye(size(ratioN)))) = false;
                     if sum(sum(ratioN)) > 0
-                        TopoNext = TopoNext
+                        if denseRatio > 0.5
+                            eta = obj.thsTopo/1.2;
+                        else
+                            eta = obj.thsTopo*2;
+                        end
+                        group1 = ratioN & ratio>eta;
+                        group2 = ratioN & ratio<eta;
+                        if sum(sum(group2)) > 0
+                            TopoNext = TopoNext & ~group2;
+                            if sum(obj.matOfColDE(TopoNext)) >= obj.numBus-1
+                                numDisconnect = sum(sum(triu(obj.Topo) - triu(TopoNext)));
+                                TopoMissConnect = sum(sum(~TopoNext & obj.data.G))/3;
+                                fprintf('We disconnect %d branches, with %d branches wrong\n', numDisconnect, TopoMissConnect);
+                                obj.Topo = TopoNext;
+                                obj.Tvec = logical(obj.matOfColDE(obj.Topo));
+                                obj.numGrad.del = sum(~obj.Tvec);
+                            end
+                        else
+                            obj.dataO.G(group1) = obj.dataO.G(group1)*0.99;
+                            obj.dataO.B(group1) = obj.dataO.B(group1)*0.99;
+                        end
+%                         obj.dataO.G(group2) = obj.dataO.G(group2)*0.8;
+%                         obj.dataO.B(group2) = obj.dataO.B(group2)*0.8;
                     else
                         obj.updateRatio = obj.updateRatioLast;
                     end

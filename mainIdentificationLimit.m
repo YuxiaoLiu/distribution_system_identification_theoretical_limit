@@ -7,7 +7,7 @@ clear;clc;
 warning off
 caseName =  'case33bw';     % the case name    'case3_dist' 'case33bw'  'case123_R' 'case141'
 numSnap = 120;             % the number of snapshot
-numRun = 1;
+numRun = 120;
 range.P = 1.2;               % the deviation range of active load 0.6
 range.Q = 0.3;             % the deviation range of reactive load to active load 0.2
 
@@ -76,42 +76,42 @@ caseDS = caseDS.genOperateData;
 
 %% We run multiple times
 
-% caseDS = caseDS.setTopo;
-% caseDS.prior = prior;
-% caseDS = caseDS.setAccuracy(ratio);
-% caseDS = caseDS.buildFIM;
-% caseDS = caseDS.updateTopo(caseDS.topoPrior);
-% numBranch = sum(caseDS.mpc.branch(:, 11));
-% Error.g = zeros(numBranch, numRun);
-% Error.b = zeros(numBranch, numRun);
-% Error.topoMiss = zeros(1, numRun);
-% Error.topoRedund = zeros(1, numRun);
-% Value.g = zeros(numBranch, numRun);
-% Value.b = zeros(numBranch, numRun);
-% for seed = 1:numRun
-%     % set the accuracy of the measurement device, and set whether we have the
-%     % measurement device of a certain state
-%     caseDS = caseDS.setTopo;
-%     caseDS = caseDS.setAccuracy(ratio, seed);
-%     caseDS = caseDS.preEvaluation(prior);
-%     caseDS = caseDS.approximateFIM(k);
-%     caseDS = caseDS.calABound(true, caseDS.topoPrior);
-%     
-%     if seed == 1
-%         caseDS = caseDS.preEvaluation(prior);
-%         caseDS = caseDS.approximateFIM(k);
-%         caseDS = caseDS.calABound(true, caseDS.topoPrior);
-%     end
-%     
-%     caseDS = caseDS.identifyLineSearch;
-%     caseDS = caseDS.evalErr;
-%     Error.g(:, seed) = caseDS.err.g;
-%     Error.b(:, seed) = caseDS.err.b;
-%     Error.topoMiss(seed) = caseDS.err.topoMiss;
-%     Error.topoRedund(seed) = caseDS.err.topoRedund;
-%     Value.g(:, seed) = caseDS.err.gEval;
-%     Value.b(:, seed) = caseDS.err.bEval;
-% end
+caseDS = caseDS.setTopo;
+caseDS.prior = prior;
+caseDS = caseDS.setAccuracy(ratio);
+caseDS = caseDS.buildFIM;
+caseDS = caseDS.updateTopo(caseDS.topoPrior);
+numBranch = sum(caseDS.mpc.branch(:, 11));
+Error.g = zeros(numBranch, numRun);
+Error.b = zeros(numBranch, numRun);
+Error.topoMiss = zeros(1, numRun);
+Error.topoRedund = zeros(1, numRun);
+Value.g = zeros(numBranch, numRun);
+Value.b = zeros(numBranch, numRun);
+for seed = 1:numRun
+    % set the accuracy of the measurement device, and set whether we have the
+    % measurement device of a certain state
+    caseDS = caseDS.setTopo;
+    caseDS = caseDS.setAccuracy(ratio, seed);
+    caseDS = caseDS.preEvaluation(prior);
+    caseDS = caseDS.approximateFIM(k);
+    caseDS = caseDS.calABound(true, caseDS.topoPrior);
+    
+    if seed == 1
+        caseDS = caseDS.preEvaluation(prior);
+        caseDS = caseDS.approximateFIM(k);
+        caseDS = caseDS.calABound(true, caseDS.topoPrior);
+    end
+    
+    caseDS = caseDS.identifyLineSearch;
+    caseDS = caseDS.evalErr;
+    Error.g(:, seed) = caseDS.err.g;
+    Error.b(:, seed) = caseDS.err.b;
+    Error.topoMiss(seed) = caseDS.err.topoMiss;
+    Error.topoRedund(seed) = caseDS.err.topoRedund;
+    Value.g(:, seed) = caseDS.err.gEval;
+    Value.b(:, seed) = caseDS.err.bEval;
+end
 
 %% We evaluate the bound
 % set the accuracy of the measurement device, and set whether we have the
