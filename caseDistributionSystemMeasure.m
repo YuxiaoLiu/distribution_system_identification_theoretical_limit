@@ -1530,7 +1530,7 @@ classdef caseDistributionSystemMeasure < caseDistributionSystem
             obj.isPHinv = true;
             obj.isIll = false;
             obj.isLBFGS = false;
-            obj.maxIter = 4000;%2000
+            obj.maxIter = 2000;%2000
             obj.thsTopo = 0.05;
             obj.Topo = ~obj.topoPrior;
             obj.Tvec = logical(obj.matOfColDE(obj.Topo));
@@ -1876,9 +1876,12 @@ classdef caseDistributionSystemMeasure < caseDistributionSystem
                 TopoNext = ratio > obj.thsTopo | (ratioB >obj.thsTopo);%Ô­À´³ËÒÔ1.5
             end
             
+%             TopoNext = obj.disconnection(obj.Topo-TopoNext, TopoNext);
+            
             if sum(obj.matOfColDE(TopoNext)) >= obj.numBus-1
                 numDisconnect = sum(sum(triu(obj.Topo) - triu(TopoNext)));
                 TopoMissConnect = sum(sum(~TopoNext & obj.data.G))/2;
+                % examine the disconnection 
                 fprintf('We disconnect %d branches, with %d branches wrong\n', numDisconnect, TopoMissConnect);
                 obj.Topo = TopoNext;
                 obj.Tvec = logical(obj.matOfColDE(obj.Topo));
@@ -1924,6 +1927,7 @@ classdef caseDistributionSystemMeasure < caseDistributionSystem
                         group2 = ratioN & ratio<eta;
                         if sum(sum(group2)) > 0
                             TopoNext = TopoNext & ~group2;
+%                             TopoNext = obj.disconnection(obj.Topo-TopoNext, TopoNext);
                             if sum(obj.matOfColDE(TopoNext)) >= obj.numBus-1
                                 numDisconnect = sum(sum(triu(obj.Topo) - triu(TopoNext)));
                                 TopoMissConnect = sum(sum(~TopoNext & obj.data.G));
@@ -3260,6 +3264,19 @@ classdef caseDistributionSystemMeasure < caseDistributionSystem
             for i = 1:n
                 h(pt:pt+n-i-1) = H(i, i+1:end);
                 pt = pt+n-i;
+            end
+        end
+        
+        function TopoNext = disconnection(TopoDelta, TopoNext)
+            % This method judge if the system is disconnected if the given
+            % line is disconnected
+            [rList, cList] = find(TopoDelta);
+            num = length(rList);
+            for i = 1:num
+                if sum(TopoNext(rList(i),:))<3 || sum(TopoNext(:, cList(i)))<3
+                    TopoNext(rList(i), cList(i)) = true;
+                    fprintf("we should not disconnect line %d-%d",rList(i),cList(i));
+                end
             end
         end
     end
